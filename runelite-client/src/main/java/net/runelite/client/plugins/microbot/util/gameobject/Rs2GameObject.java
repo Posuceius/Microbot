@@ -1825,11 +1825,11 @@ public class Rs2GameObject {
             return false;
         }
 
-        // Check if the object's tile is reachable; if not, try opening blocking doors
-        if (!Rs2Tile.isTileReachable(object.getWorldLocation())) {
-            if (handleBlockingDoors(object.getWorldLocation())) {
-                sleepUntil(() -> Rs2Tile.isTileReachable(object.getWorldLocation()), 2000);
-            }
+        // Check if the object is reachable; if not, walk toward it (opens doors along the path)
+        if (!Rs2Tile.isTileReachable(object.getWorldLocation())
+                && !Rs2Tile.areSurroundingTilesWalkable(object.getWorldLocation(), 1, 1)) {
+            Rs2Walker.walkTo(object.getWorldLocation());
+            sleepUntil(() -> Rs2Tile.areSurroundingTilesWalkable(object.getWorldLocation(), 1, 1), 5000);
         }
 
         try {

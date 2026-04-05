@@ -12,6 +12,7 @@ import net.runelite.client.plugins.microbot.util.menu.NewMenuEntry;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.plugins.microbot.util.reflection.Rs2Reflection;
 import net.runelite.client.plugins.microbot.util.tile.Rs2Tile;
+import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
 import static net.runelite.client.plugins.microbot.util.Global.*;
 
 import java.awt.*;
@@ -205,12 +206,11 @@ public class Rs2TileItemModel implements TileItem, IEntity {
     }
 
     public boolean click(String action) {
-        // Check if the ground item's tile is reachable; if not, try opening blocking doors
+        // Check if the ground item is reachable; if not, walk toward it (opens doors along the path)
         WorldPoint itemLocation = getWorldLocation();
         if (itemLocation != null && !Rs2Tile.isTileReachable(itemLocation)) {
-            if (Rs2GameObject.handleBlockingDoors(itemLocation)) {
-                sleepUntil(() -> Rs2Tile.isTileReachable(itemLocation), 2000);
-            }
+            Rs2Walker.walkTo(itemLocation);
+            sleepUntil(() -> Rs2Tile.isTileReachable(itemLocation), 5000);
         }
 
         try {
@@ -234,10 +234,23 @@ public class Rs2TileItemModel implements TileItem, IEntity {
 
             String[] groundActions = Rs2Reflection.getGroundItemActions(item);
 
+            Microbot.log("Rs2TileItemModel.click: id=" + identifier
+                + " name=" + getName()
+                + " action='" + action + "'"
+                + " groundActions=" + java.util.Arrays.toString(groundActions)
+                + " worldLoc=" + getWorldLocation()
+                + " param0=" + param0 + " param1=" + param1);
+
             int index = -1;
             if (action.isEmpty()) {
-                action = groundActions[0];
-                index = 0;
+                // Find the first non-null action
+                for (int actionIndex = 0; actionIndex < groundActions.length; actionIndex++) {
+                    if (groundActions[actionIndex] != null) {
+                        action = groundActions[actionIndex];
+                        index = actionIndex;
+                        break;
+                    }
+                }
             } else {
                 for (int i = 0; i < groundActions.length; i++) {
                     String groundAction = groundActions[i];
@@ -259,6 +272,10 @@ public class Rs2TileItemModel implements TileItem, IEntity {
             } else if (index == 4) {
                 menuAction = MenuAction.GROUND_ITEM_FIFTH_OPTION;
             }
+            Microbot.log("Rs2TileItemModel.click: actionIndex=" + index
+                + " menuAction=" + menuAction.name()
+                + " resolvedAction='" + action + "'");
+
             LocalPoint localPoint1 = getLocalLocation();
             if (localPoint1 != null) {
                 Polygon canvas = Perspective.getCanvasTilePoly(Microbot.getClient(), localPoint1);

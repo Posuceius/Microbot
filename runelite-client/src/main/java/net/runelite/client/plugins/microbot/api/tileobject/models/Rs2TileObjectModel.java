@@ -15,6 +15,7 @@ import net.runelite.client.plugins.microbot.util.menu.NewMenuEntry;
 import net.runelite.client.plugins.microbot.util.gameobject.Rs2GameObject;
 import net.runelite.client.plugins.microbot.util.misc.Rs2UiHelper;
 import net.runelite.client.plugins.microbot.util.tile.Rs2Tile;
+import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -221,11 +222,11 @@ public class Rs2TileObjectModel implements TileObject, IEntity {
      * @return true if the interaction was successful, false otherwise
      */
     public boolean click(String action) {
-        // Check if the object's tile is reachable; if not, try opening blocking doors
-        if (!Rs2Tile.isTileReachable(getWorldLocation())) {
-            if (Rs2GameObject.handleBlockingDoors(getWorldLocation())) {
-                sleepUntil(() -> Rs2Tile.isTileReachable(getWorldLocation()), 2000);
-            }
+        // Check if the object is reachable; if not, walk toward it (opens doors along the path)
+        if (!Rs2Tile.isTileReachable(getWorldLocation())
+                && !Rs2Tile.areSurroundingTilesWalkable(getWorldLocation(), 1, 1)) {
+            Rs2Walker.walkTo(getWorldLocation());
+            sleepUntil(() -> Rs2Tile.areSurroundingTilesWalkable(getWorldLocation(), 1, 1), 5000);
         }
 
         try {
