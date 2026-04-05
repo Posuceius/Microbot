@@ -31,6 +31,7 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import static net.runelite.client.plugins.microbot.util.Global.sleep;
 import static net.runelite.client.plugins.microbot.util.Global.sleepUntil;
 
 /**
@@ -94,6 +95,12 @@ public class Rs2GameObject {
 			tile.getGroundObject(),
 			tile.getWallObject()
 		);
+
+	/**
+	 * Door-like actions recognized by the door detection system.
+	 */
+	private static final List<String> DOOR_ACTIONS = List.of(
+		"open", "go-through", "walk-through", "pick-lock", "pay-toll", "pass", "enter");
 
 
     public static boolean interact(WorldPoint worldPoint) {
@@ -1713,6 +1720,139 @@ public class Rs2GameObject {
         }).orElse(null);
     }
 
+	/**
+	 * Checks a single tile for a door or gate object and attempts to open it.
+	 * Searches for WallObjects first (most doors/gates), then GameObjects as fallback.
+	 * Resolves impostor compositions to get current-state actions (e.g., closed door shows "Open").
+	 *
+	 * @param probe the tile to check for a door
+	 * @return true if a door was found and an open interaction was sent, false otherwise
+	 */
+	public static boolean tryOpenDoorAt(WorldPoint probe) {
+		TileObject doorObject = findDoorAt(probe);
+		if (doorObject == null) return false;
+
+		String matchedAction = findDoorAction(doorObject);
+		if (matchedAction == null) return false;
+
+		Microbot.log("tryOpenDoorAt: opening door with action " + matchedAction + " at " + probe);
+		interact(doorObject, matchedAction);
+		sleep(600);
+		Rs2Player.waitForWalking();
+		return true;
+	}
+
+	/**
+	 * Finds a door or gate object at the given tile without interacting with it.
+	 * Used by callers that need to handle the door interaction themselves (e.g., Stronghold of Security).
+	 *
+	 * @param probe the tile to check
+	 * @return the door TileObject, or null if no door found
+	 */
+	public static TileObject findDoorAt(WorldPoint probe) {
+		if (probe == null) return null;
+
+		WallObject wall = getWallObject(o -> o.getWorldLocation().equals(probe), probe, 2);
+		TileObject doorObject = (wall != null)
+			? wall
+			: getGameObject(o -> o.getWorldLocation().equals(probe), probe, 2);
+
+		if (doorObject == null) return null;
+
+		ObjectComposition composition = convertToObjectComposition(doorObject);
+		if (composition == null) return null;
+
+		if (composition.getImpostorIds() != null) {
+			composition = composition.getImpostor();
+			if (composition == null) return null;
+		}
+
+		if (composition.getName() == null || composition.getName().equals("null")) return null;
+
+		String[] objectActions = composition.getActions();
+		if (objectActions == null) return null;
+
+		for (String objectAction : objectActions) {
+			if (objectAction == null) continue;
+			for (String doorAction : DOOR_ACTIONS) {
+				if (objectAction.toLowerCase().startsWith(doorAction)) {
+					return doorObject;
+				}
+			}
+		}
+
+		return null;
+	}
+
+	/**
+	 * Finds the matching door action on a door object previously found by {@link #findDoorAt(WorldPoint)}.
+	 *
+	 * @param doorObject the door object to check
+	 * @return the matched action string, or null if no door action found
+	 */
+	public static String findDoorAction(TileObject doorObject) {
+		if (doorObject == null) return null;
+
+		ObjectComposition composition = convertToObjectComposition(doorObject);
+		if (composition == null) return null;
+
+		if (composition.getImpostorIds() != null) {
+			composition = composition.getImpostor();
+			if (composition == null) return null;
+		}
+
+		String[] objectActions = composition.getActions();
+		if (objectActions == null) return null;
+
+		for (String objectAction : objectActions) {
+			if (objectAction == null) continue;
+			for (String doorAction : DOOR_ACTIONS) {
+				if (objectAction.toLowerCase().startsWith(doorAction)) {
+					return objectAction;
+				}
+			}
+		}
+
+		return null;
+	}
+
+	/**
+	 * Attempts to find and open any door or gate blocking the path between the player
+	 * and a target location. Probes tiles adjacent to the player in the direction of
+	 * the target, delegating per-tile detection to {@link #tryOpenDoorAt(WorldPoint)}.
+	 *
+	 * @param targetLocation the location the player is trying to reach
+	 * @return true if a blocking door was found and opened, false otherwise
+	 */
+	public static boolean handleBlockingDoors(WorldPoint targetLocation) {
+		WorldPoint playerLocation = Rs2Player.getWorldLocation();
+		if (playerLocation == null || targetLocation == null) return false;
+
+		int deltaX = Integer.signum(targetLocation.getX() - playerLocation.getX());
+		int deltaY = Integer.signum(targetLocation.getY() - playerLocation.getY());
+
+		// Probe tiles between the player and the target direction
+		List<WorldPoint> probes = new ArrayList<>();
+		if (deltaX != 0) {
+			probes.add(new WorldPoint(playerLocation.getX() + deltaX, playerLocation.getY(), playerLocation.getPlane()));
+		}
+		if (deltaY != 0) {
+			probes.add(new WorldPoint(playerLocation.getX(), playerLocation.getY() + deltaY, playerLocation.getPlane()));
+		}
+		if (deltaX != 0 && deltaY != 0) {
+			probes.add(new WorldPoint(playerLocation.getX() + deltaX, playerLocation.getY() + deltaY, playerLocation.getPlane()));
+		}
+		probes.add(playerLocation);
+
+		for (WorldPoint probe : probes) {
+			if (tryOpenDoorAt(probe)) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
     private static boolean clickObject(TileObject object) {
         return clickObject(object, "");
     }
@@ -1723,6 +1863,13 @@ public class Rs2GameObject {
             Microbot.log("Object with id " + object.getId() + " is not close enough to interact with. Walking to the object....");
             Rs2Walker.walkTo(object.getWorldLocation());
             return false;
+        }
+
+        // Check if the object is reachable; if not, walk toward it (opens doors along the path)
+        if (!Rs2Tile.isTileReachable(object.getWorldLocation())
+                && !Rs2Tile.areSurroundingTilesWalkable(object.getWorldLocation(), 1, 1)) {
+            Rs2Walker.walkTo(object.getWorldLocation());
+            sleepUntil(() -> Rs2Tile.areSurroundingTilesWalkable(object.getWorldLocation(), 1, 1), 5000);
         }
 
         try {

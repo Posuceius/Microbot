@@ -12,7 +12,10 @@ import net.runelite.client.plugins.microbot.api.boat.Rs2BoatCache;
 import net.runelite.client.plugins.microbot.util.camera.Rs2Camera;
 import net.runelite.client.plugins.microbot.util.equipment.Rs2Equipment;
 import net.runelite.client.plugins.microbot.util.menu.NewMenuEntry;
+import net.runelite.client.plugins.microbot.util.gameobject.Rs2GameObject;
 import net.runelite.client.plugins.microbot.util.misc.Rs2UiHelper;
+import net.runelite.client.plugins.microbot.util.tile.Rs2Tile;
+import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -45,7 +48,17 @@ public class Rs2TileObjectModel implements TileObject, IEntity {
 
     public Rs2TileObjectModel(TileObject tileObject) {
         this.tileObject = tileObject;
-        this.tileObjectType = TileObjectType.GENERIC;
+        if (tileObject instanceof GameObject) {
+            this.tileObjectType = TileObjectType.GAME;
+        } else if (tileObject instanceof WallObject) {
+            this.tileObjectType = TileObjectType.WALL;
+        } else if (tileObject instanceof DecorativeObject) {
+            this.tileObjectType = TileObjectType.DECORATIVE;
+        } else if (tileObject instanceof GroundObject) {
+            this.tileObjectType = TileObjectType.GROUND;
+        } else {
+            this.tileObjectType = TileObjectType.GENERIC;
+        }
     }
 
     @Getter
@@ -209,6 +222,13 @@ public class Rs2TileObjectModel implements TileObject, IEntity {
      * @return true if the interaction was successful, false otherwise
      */
     public boolean click(String action) {
+        // Check if the object is reachable; if not, walk toward it (opens doors along the path)
+        if (!Rs2Tile.isTileReachable(getWorldLocation())
+                && !Rs2Tile.areSurroundingTilesWalkable(getWorldLocation(), 1, 1)) {
+            Rs2Walker.walkTo(getWorldLocation());
+            sleepUntil(() -> Rs2Tile.areSurroundingTilesWalkable(getWorldLocation(), 1, 1), 5000);
+        }
+
         try {
 
             int param0;
