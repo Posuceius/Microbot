@@ -234,13 +234,6 @@ public class Rs2TileItemModel implements TileItem, IEntity {
 
             String[] groundActions = Rs2Reflection.getGroundItemActions(item);
 
-            Microbot.log("Rs2TileItemModel.click: id=" + identifier
-                + " name=" + getName()
-                + " action='" + action + "'"
-                + " groundActions=" + java.util.Arrays.toString(groundActions)
-                + " worldLoc=" + getWorldLocation()
-                + " param0=" + param0 + " param1=" + param1);
-
             int index = -1;
             if (action.isEmpty()) {
                 // Find the first non-null action
@@ -272,10 +265,6 @@ public class Rs2TileItemModel implements TileItem, IEntity {
             } else if (index == 4) {
                 menuAction = MenuAction.GROUND_ITEM_FIFTH_OPTION;
             }
-            Microbot.log("Rs2TileItemModel.click: actionIndex=" + index
-                + " menuAction=" + menuAction.name()
-                + " resolvedAction='" + action + "'");
-
             LocalPoint localPoint1 = getLocalLocation();
             if (localPoint1 != null) {
                 Polygon canvas = Perspective.getCanvasTilePoly(Microbot.getClient(), localPoint1);

@@ -1081,8 +1081,15 @@ public class Rs2Walker {
                 WorldPoint playerLoc = Rs2Player.getWorldLocation();
                 if (!adjacentToPath || playerLoc == null || !Objects.equals(probe.getPlane(), playerLoc.getPlane())) continue;
 
-                if (Rs2GameObject.tryOpenDoorAt(probe)) {
-                    return true;
+                TileObject doorObject = Rs2GameObject.findDoorAt(probe);
+                if (doorObject != null) {
+                    String doorAction = Rs2GameObject.findDoorAction(doorObject);
+                    if (doorAction != null) {
+                        if (!handleDoorException(doorObject, doorAction)) {
+                            Rs2GameObject.tryOpenDoorAt(probe);
+                        }
+                        return true;
+                    }
                 }
             }
         }

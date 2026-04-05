@@ -1729,51 +1729,91 @@ public class Rs2GameObject {
 	 * @return true if a door was found and an open interaction was sent, false otherwise
 	 */
 	public static boolean tryOpenDoorAt(WorldPoint probe) {
-		if (probe == null) return false;
+		TileObject doorObject = findDoorAt(probe);
+		if (doorObject == null) return false;
 
-		// Check WallObjects first (most doors/gates are WallObjects)
+		String matchedAction = findDoorAction(doorObject);
+		if (matchedAction == null) return false;
+
+		Microbot.log("tryOpenDoorAt: opening door with action " + matchedAction + " at " + probe);
+		interact(doorObject, matchedAction);
+		sleep(600);
+		Rs2Player.waitForWalking();
+		return true;
+	}
+
+	/**
+	 * Finds a door or gate object at the given tile without interacting with it.
+	 * Used by callers that need to handle the door interaction themselves (e.g., Stronghold of Security).
+	 *
+	 * @param probe the tile to check
+	 * @return the door TileObject, or null if no door found
+	 */
+	public static TileObject findDoorAt(WorldPoint probe) {
+		if (probe == null) return null;
+
 		WallObject wall = getWallObject(o -> o.getWorldLocation().equals(probe), probe, 2);
 		TileObject doorObject = (wall != null)
 			? wall
 			: getGameObject(o -> o.getWorldLocation().equals(probe), probe, 2);
 
-		if (doorObject == null) return false;
+		if (doorObject == null) return null;
 
 		ObjectComposition composition = convertToObjectComposition(doorObject);
-		if (composition == null) return false;
+		if (composition == null) return null;
 
-		// Resolve impostor to get current-state actions (e.g., open vs closed)
 		if (composition.getImpostorIds() != null) {
 			composition = composition.getImpostor();
-			if (composition == null) return false;
+			if (composition == null) return null;
 		}
 
-		if (composition.getName() == null || composition.getName().equals("null")) return false;
+		if (composition.getName() == null || composition.getName().equals("null")) return null;
 
-		// Find a matching door action
 		String[] objectActions = composition.getActions();
-		if (objectActions == null) return false;
+		if (objectActions == null) return null;
 
-		String matchedAction = null;
 		for (String objectAction : objectActions) {
 			if (objectAction == null) continue;
 			for (String doorAction : DOOR_ACTIONS) {
 				if (objectAction.toLowerCase().startsWith(doorAction)) {
-					matchedAction = objectAction;
-					break;
+					return doorObject;
 				}
 			}
-			if (matchedAction != null) break;
 		}
 
-		if (matchedAction == null) return false;
+		return null;
+	}
 
-		Microbot.log("tryOpenDoorAt: opening " + composition.getName()
-			+ " with action " + matchedAction + " at " + probe);
-		interact(doorObject, matchedAction);
-		sleep(600);
-		Rs2Player.waitForWalking();
-		return true;
+	/**
+	 * Finds the matching door action on a door object previously found by {@link #findDoorAt(WorldPoint)}.
+	 *
+	 * @param doorObject the door object to check
+	 * @return the matched action string, or null if no door action found
+	 */
+	public static String findDoorAction(TileObject doorObject) {
+		if (doorObject == null) return null;
+
+		ObjectComposition composition = convertToObjectComposition(doorObject);
+		if (composition == null) return null;
+
+		if (composition.getImpostorIds() != null) {
+			composition = composition.getImpostor();
+			if (composition == null) return null;
+		}
+
+		String[] objectActions = composition.getActions();
+		if (objectActions == null) return null;
+
+		for (String objectAction : objectActions) {
+			if (objectAction == null) continue;
+			for (String doorAction : DOOR_ACTIONS) {
+				if (objectAction.toLowerCase().startsWith(doorAction)) {
+					return objectAction;
+				}
+			}
+		}
+
+		return null;
 	}
 
 	/**
