@@ -1,28 +1,23 @@
 package net.runelite.client.plugins.microbot.util.mouse.naturalmouse;
 
-import lombok.Getter;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.util.Global;
 import net.runelite.client.plugins.microbot.util.antiban.Rs2Antiban;
+import net.runelite.client.plugins.microbot.util.antiban.Rs2AntibanSettings;
 import net.runelite.client.plugins.microbot.util.antiban.enums.ActivityIntensity;
 import net.runelite.client.plugins.microbot.util.math.Rs2Random;
-import net.runelite.client.plugins.microbot.util.mouse.naturalmouse.api.MouseInfoAccessor;
-import net.runelite.client.plugins.microbot.util.mouse.naturalmouse.api.MouseMotionFactory;
+import net.runelite.client.plugins.microbot.util.mouse.humanization.HumanMouseMovement;
+import net.runelite.client.plugins.microbot.util.mouse.humanization.MotionProfile;
+import net.runelite.client.plugins.microbot.util.mouse.humanization.MouseProfile;
+import net.runelite.client.plugins.microbot.util.mouse.humanization.calibration.MouseCalibrationService;
 import net.runelite.client.plugins.microbot.util.mouse.naturalmouse.api.SystemCalls;
 import net.runelite.client.plugins.microbot.util.mouse.naturalmouse.support.DefaultMouseMotionNature;
-import net.runelite.client.plugins.microbot.util.mouse.naturalmouse.support.DefaultSpeedManager;
-import net.runelite.client.plugins.microbot.util.mouse.naturalmouse.support.Flow;
 import net.runelite.client.plugins.microbot.util.mouse.naturalmouse.support.MouseMotionNature;
-import net.runelite.client.plugins.microbot.util.mouse.naturalmouse.util.FactoryTemplates;
-import net.runelite.client.plugins.microbot.util.mouse.naturalmouse.util.FlowTemplates;
-import net.runelite.client.plugins.microbot.util.mouse.naturalmouse.util.Pair;
 
 import javax.inject.Inject;
 import java.awt.*;
-import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -30,177 +25,199 @@ import java.util.concurrent.ThreadLocalRandom;
 
 @Slf4j
 public class NaturalMouse {
-    public final MouseMotionNature nature;
-    private final ThreadLocalRandom random = ThreadLocalRandom.current();
-    private final ExecutorService executorService = Executors.newSingleThreadExecutor();
-    @Inject
-    private Client client;
-    @Getter
-    @Setter
-    private List<Flow> flows = List.of(
-            new Flow(FlowTemplates.variatingFlow()),
-            new Flow(FlowTemplates.slowStartupFlow()),
-            new Flow(FlowTemplates.slowStartup2Flow()),
-            new Flow(FlowTemplates.jaggedFlow()),
-            new Flow(FlowTemplates.interruptedFlow()),
-            new Flow(FlowTemplates.interruptedFlow2()),
-            new Flow(FlowTemplates.stoppingFlow()),
-            new Flow(FlowTemplates.adjustingFlow()),
-            new Flow(FlowTemplates.random())
-    );
+	public final MouseMotionNature nature;
+	private final ThreadLocalRandom random = ThreadLocalRandom.current();
+	private final ExecutorService executorService = Executors.newSingleThreadExecutor();
+	@Inject
+	private Client client;
 
-    @Inject
-    public NaturalMouse() {
-        nature = new DefaultMouseMotionNature();
-        nature.setSystemCalls(new SystemCallsImpl());
-        nature.setMouseInfo(new MouseInfoImpl());
-    }
+	@Inject
+	public NaturalMouse() {
+		nature = new DefaultMouseMotionNature();
+		nature.setSystemCalls(new SystemCallsImpl());
+	}
 
-    public synchronized void moveTo(int dx, int dy) {
+	public synchronized void moveTo(int dx, int dy) {
 //		if(Rs2UiHelper.isStretchedEnabled())
 //		{
 //			dx = Rs2UiHelper.stretchX(dx);
 //			dy = Rs2UiHelper.stretchY(dy);
 //		}
-        int finalDx = dx;
-        int finalDy = dy;
-        Point mousePos = Microbot.getMouse().getMousePosition();
-        // check if current mouse position is already at the destination
-        if (mousePos.x == finalDx && mousePos.y == finalDy) {
-            return;
-        }
+		int finalDx = dx;
+		int finalDy = dy;
+		Point mousePos = Microbot.getMouse().getMousePosition();
+		// check if current mouse position is already at the destination
+		if (mousePos.x == finalDx && mousePos.y == finalDy) {
+			return;
+		}
 
-        if (!Microbot.getClient().isClientThread()) {
-            move(finalDx, finalDy);
-        } else {
+		if (!Microbot.getClient().isClientThread()) {
+			move(finalDx, finalDy);
+		} else {
 
-            executorService.submit(() -> move(finalDx, finalDy));
-        }
-    }
+			executorService.submit(() -> move(finalDx, finalDy));
+		}
+	}
 
-    private synchronized void move(int dx, int dy) {
-        var motion = getFactory().build(dx, dy);
-        try {
-            motion.move();
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
-    }
+	private synchronized void move(int dx, int dy) {
+		Point currentPos = null;
+		try {
+			currentPos = Microbot.getMouse().getMousePosition();
+		} catch (Exception exception) {
+			// Fallback if mouse position unavailable
+		}
+		int startX = currentPos != null ? currentPos.x : 0;
+		int startY = currentPos != null ? currentPos.y : 0;
 
-    public MouseMotionFactory getFactory() {
-        if (Rs2Antiban.getActivityIntensity() == ActivityIntensity.VERY_LOW) {
-            log.debug("Creating average computer user motion factory");
-            return FactoryTemplates.createAverageComputerUserMotionFactory(nature);
-        } else if (Rs2Antiban.getActivityIntensity() == ActivityIntensity.LOW) {
-            log.debug("Creating normal gamer motion factory");
-            return FactoryTemplates.createNormalGamerMotionFactory(nature);
-        } else if (Rs2Antiban.getActivityIntensity() == ActivityIntensity.MODERATE) {
-            log.debug("Creating fast gamer motion factory");
-            return FactoryTemplates.createFastGamerMotionFactory(nature);
-        } else if (Rs2Antiban.getActivityIntensity() == ActivityIntensity.HIGH) {
-            log.debug("Creating fast gamer motion factory");
-            return FactoryTemplates.createFastGamerMotionFactory(nature);
-        } else if (Rs2Antiban.getActivityIntensity() == ActivityIntensity.EXTREME) {
-            log.debug("Creating super fast gamer motion factory");
-            return FactoryTemplates.createSuperFastGamerMotionFactory(nature);
-        } else {
-            log.debug("Default: Creating super fast gamer motion factory");
-            return FactoryTemplates.createSuperFastGamerMotionFactory(nature);
-        }
+		MouseProfile profile = getProfileForIntensity();
 
-//		var factory = new MouseMotionFactory();
-//		factory.setNature(nature);
-//		factory.setRandom(random);
-//
-//		var manager = new SpeedManagerImpl(flows);
-//		factory.setDeviationProvider(new SinusoidalDeviationProvider(15.0));
-//		factory.setNoiseProvider(new DefaultNoiseProvider(2.0));
-//		factory.getNature().setReactionTimeVariationMs(120);
-//		manager.setMouseMovementBaseTimeMs(130);
-//
-//		var overshootManager = (DefaultOvershootManager) factory.getOvershootManager();
-//		overshootManager.setOvershoots(2);
-//		factory.setSpeedManager(manager);
-//
-//		return factory;
-    }
+		List<HumanMouseMovement.TimedPoint> path =
+			HumanMouseMovement.generateTimedPath(startX, startY, dx, dy, profile);
 
-    /**
-     * Moves the mouse off screen with a default 100% chance.
-     * This method will always move the mouse off screen when called.
-     */
-    public void moveOffScreen() {
-        // Always move the mouse off screen (default behavior)
-        moveOffScreen(100.0); // Calls the overloaded method with a 100% chance
-    }
+		for (HumanMouseMovement.TimedPoint point : path) {
+			nature.getSystemCalls().setMousePosition(point.positionX, point.positionY);
+			if (point.delayAfterMillis > 0.5) {
+				nature.getSystemCalls().sleep((long) point.delayAfterMillis);
+			}
+		}
+	}
 
-    /**
-     * Moves the mouse off screen based on a given percentage chance.
-     *
-     * @param chancePercentage the chance (in percentage) to move the mouse off screen.
-     *                         This value should be between 0.0 and 100.0 (inclusive).
-     *                         Note: This parameter should not be a fractional value between
-     *                         0.0 and 0.99; use values representing a whole percentage (e.g., 25.0, 50.0).
-     */
-    public void moveOffScreen(double chancePercentage) {
-        if (chancePercentage >= 100 || Rs2Random.dicePercentage(chancePercentage)) {
-            // Move off screen if the chance is met
-            int horizontal = random.nextBoolean() ? -1 : client.getCanvasWidth() + 1;
-            int vertical = random.nextBoolean() ? -1 : client.getCanvasHeight() + 1;
+	/**
+	 * Maps the current {@link ActivityIntensity} to a {@link MouseProfile} with
+	 * research-based humanization parameters.
+	 *
+	 * Integrates with the existing antiban system:
+	 * - Applies mouse fatigue (gradually increasing base time) when simulateFatigue is enabled
+	 * - Disables overshoots when simulateMistakes is disabled
+	 *
+	 * Fatigue max base times preserve the same differential as the original FactoryTemplates:
+	 * normalGamer +50ms, fastGamer +50ms, superFastGamer +30ms.
+	 */
+	private MouseProfile getProfileForIntensity() {
+		ActivityIntensity intensity = Rs2Antiban.getActivityIntensity();
+		if (intensity == null) intensity = ActivityIntensity.LOW;
 
-            boolean exitHorizontally = random.nextBoolean();
-            if (exitHorizontally) {
-                moveTo(horizontal, random.nextInt(0, client.getCanvasHeight() + 1));
-            } else {
-                moveTo(random.nextInt(0, client.getCanvasWidth() + 1), vertical);
-            }
-        }
-    }
+		MouseProfile profile;
+		int maxBaseTimeMs = getMaxBaseTimeMsForIntensity(intensity);
 
-    // Move to a random point on the screen
-    public void moveRandom() {
-        moveTo(random.nextInt(0, client.getCanvasWidth() + 1), random.nextInt(0, client.getCanvasHeight() + 1));
-    }
+		if (MouseCalibrationService.isCalibrated()) {
+			log.debug("Using calibrated mouse profile for intensity {}", intensity);
+			profile = MouseCalibrationService.getScaledProfile(intensity);
+		} else {
+			switch (intensity) {
+				case VERY_LOW:
+					log.debug("Using casual user mouse profile");
+					profile = MouseProfile.veryLow();
+					break;
+				case LOW:
+					log.debug("Using normal gamer mouse profile");
+					profile = MouseProfile.low();
+					break;
+				case MODERATE:
+					log.debug("Using fast gamer mouse profile");
+					profile = MouseProfile.moderate();
+					break;
+				case HIGH:
+					log.debug("Using fast gamer mouse profile");
+					profile = MouseProfile.high();
+					break;
+				case EXTREME:
+					log.debug("Using super fast gamer mouse profile");
+					profile = MouseProfile.extreme();
+					break;
+				default:
+					log.debug("Default: Using normal gamer mouse profile");
+					profile = MouseProfile.low();
+					break;
+			}
+		}
 
-    private static class SpeedManagerImpl extends DefaultSpeedManager {
-        private SpeedManagerImpl(Collection<Flow> flows) {
-            super(flows);
-        }
+		MotionProfile motionProfile = profile.getMotionProfile();
 
-        @Override
-        public Pair<Flow, Long> getFlowWithTime(double distance) {
-            var pair = super.getFlowWithTime(distance);
-            return new Pair<>(pair.x, pair.y);
-        }
-    }
+		// Apply fatigue: gradually increase base time over session (matches original FactoryTemplates behavior)
+		if (Rs2AntibanSettings.simulateFatigue && maxBaseTimeMs > 0) {
+			int fatiguedBaseTime = Rs2Antiban.mouseFatigue.calculateBaseTimeWithNoise(
+				motionProfile.getBaseTimeMs(), maxBaseTimeMs);
+			motionProfile = motionProfile.withBaseTimeMs(fatiguedBaseTime);
+		}
 
-    private static class MouseInfoImpl implements MouseInfoAccessor {
-        @Override
-        public Point getMousePosition() {
-            return Microbot.getMouse().getMousePosition();
-        }
-    }
+		// Respect simulateMistakes setting: disable overshoots when off (matches original FactoryTemplates behavior)
+		if (!Rs2AntibanSettings.simulateMistakes) {
+			motionProfile = motionProfile.withOvershootCount(0);
+		}
 
-    private class SystemCallsImpl implements SystemCalls {
-        @Override
-        public long currentTimeMillis() {
-            return System.currentTimeMillis();
-        }
+		profile.setMotionProfile(motionProfile);
+		return profile;
+	}
 
-        @Override
-        public void sleep(long time) {
-            Global.sleep((int) time);
-        }
+	private static int getMaxBaseTimeMsForIntensity(ActivityIntensity intensity) {
+		switch (intensity) {
+			case VERY_LOW: return 0;
+			case LOW: return 225;
+			case MODERATE: return 195;
+			case HIGH: return 195;
+			case EXTREME: return 135;
+			default: return 225;
+		}
+	}
 
-        @Override
-        public Dimension getScreenSize() {
-            return Microbot.getClient().getCanvas().getSize();
-        }
+	/**
+	 * Moves the mouse off screen with a default 100% chance.
+	 * This method will always move the mouse off screen when called.
+	 */
+	public void moveOffScreen() {
+		// Always move the mouse off screen (default behavior)
+		moveOffScreen(100.0); // Calls the overloaded method with a 100% chance
+	}
 
-        @Override
-        public void setMousePosition(int x, int y) {
-            Microbot.getMouse().move(x, y);
+	/**
+	 * Moves the mouse off screen based on a given percentage chance.
+	 *
+	 * @param chancePercentage the chance (in percentage) to move the mouse off screen.
+	 *                         This value should be between 0.0 and 100.0 (inclusive).
+	 *                         Note: This parameter should not be a fractional value between
+	 *                         0.0 and 0.99; use values representing a whole percentage (e.g., 25.0, 50.0).
+	 */
+	public void moveOffScreen(double chancePercentage) {
+		if (chancePercentage >= 100 || Rs2Random.dicePercentage(chancePercentage)) {
+			// Move off screen if the chance is met
+			int horizontal = random.nextBoolean() ? -1 : client.getCanvasWidth() + 1;
+			int vertical = random.nextBoolean() ? -1 : client.getCanvasHeight() + 1;
 
-        }
-    }
+			boolean exitHorizontally = random.nextBoolean();
+			if (exitHorizontally) {
+				moveTo(horizontal, random.nextInt(0, client.getCanvasHeight() + 1));
+			} else {
+				moveTo(random.nextInt(0, client.getCanvasWidth() + 1), vertical);
+			}
+		}
+	}
+
+	// Move to a random point on the screen
+	public void moveRandom() {
+		moveTo(random.nextInt(0, client.getCanvasWidth() + 1), random.nextInt(0, client.getCanvasHeight() + 1));
+	}
+
+	private class SystemCallsImpl implements SystemCalls {
+		@Override
+		public long currentTimeMillis() {
+			return System.currentTimeMillis();
+		}
+
+		@Override
+		public void sleep(long time) {
+			Global.sleep((int) time);
+		}
+
+		@Override
+		public Dimension getScreenSize() {
+			return Microbot.getClient().getCanvas().getSize();
+		}
+
+		@Override
+		public void setMousePosition(int x, int y) {
+			Microbot.getMouse().move(x, y);
+
+		}
+	}
 }
