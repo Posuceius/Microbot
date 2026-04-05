@@ -291,6 +291,7 @@ public class Rs2GroundItem {
 	private static String getBlacklistKey(GroundItem groundItem) {
 		return groundItem.getLocation().getX() + ":"
 			+ groundItem.getLocation().getY() + ":"
+			+ groundItem.getLocation().getPlane() + ":"
 			+ groundItem.getId();
 	}
 
