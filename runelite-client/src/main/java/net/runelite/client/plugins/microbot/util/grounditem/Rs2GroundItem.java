@@ -36,7 +36,7 @@ import static net.runelite.client.plugins.microbot.util.Global.sleepUntil;
 public class Rs2GroundItem {
     private static final int DESPAWN_DELAY_THRESHOLD_TICKS = 150;
 
-	// Blacklisted ground items (location key format: "x:y:itemId") - items the server rejected (e.g., ironman can't take)
+	// Blacklisted ground items (location key format: "x:y:plane:itemId:spawnTimeMs") - items the server rejected (e.g., ironman can't take)
 	private static final Set<String> lootBlacklist = ConcurrentHashMap.newKeySet();
 	private static volatile GroundItem lastInteractedItem = null;
 
@@ -286,13 +286,18 @@ public class Rs2GroundItem {
     }
 
 	/**
-	 * Creates a unique key for a ground item based on its location and ID.
+	 * Creates a unique key for a ground item based on its location, ID, and spawn time.
+	 * Including spawn time ensures each unique spawn is tracked separately (prevents collision
+	 * when the same item respawns at the same location).
 	 */
 	private static String getBlacklistKey(GroundItem groundItem) {
+		Instant spawnTime = groundItem.getSpawnTime();
+		String spawnId = (spawnTime != null) ? String.valueOf(spawnTime.toEpochMilli()) : "0";
 		return groundItem.getLocation().getX() + ":"
 			+ groundItem.getLocation().getY() + ":"
 			+ groundItem.getLocation().getPlane() + ":"
-			+ groundItem.getId();
+			+ groundItem.getId() + ":"
+			+ spawnId;
 	}
 
 	/**
@@ -518,6 +523,7 @@ public class Rs2GroundItem {
     private static boolean hasLootableItems(Predicate<GroundItem> filter) {
         List<GroundItem> groundItems = getGroundItems().values().stream()
                 .filter(filter)
+                .filter(gi -> !isBlacklisted(gi))  // Exclude blacklisted items from loot validation
                 .collect(Collectors.toList());
 
         return !groundItems.isEmpty();
