@@ -1086,7 +1086,7 @@ public class Rs2Walker {
                     String doorAction = Rs2GameObject.findDoorAction(doorObject);
                     if (doorAction != null) {
                         if (!handleDoorException(doorObject, doorAction)) {
-                            Rs2GameObject.tryOpenDoorAt(probe);
+                            return Rs2GameObject.tryOpenDoorAt(probe);
                         }
                         return true;
                     }
