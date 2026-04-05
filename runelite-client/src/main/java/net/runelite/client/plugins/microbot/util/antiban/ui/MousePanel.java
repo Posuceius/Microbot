@@ -3,6 +3,7 @@ package net.runelite.client.plugins.microbot.util.antiban.ui;
 import net.runelite.client.plugins.microbot.util.antiban.Rs2Antiban;
 import net.runelite.client.plugins.microbot.util.antiban.Rs2AntibanSettings;
 import net.runelite.client.plugins.microbot.util.antiban.enums.ActivityIntensity;
+import net.runelite.client.plugins.microbot.util.mouse.humanization.calibration.MouseCalibrationService;
 import net.runelite.client.ui.ColorScheme;
 
 import javax.swing.*;
@@ -25,6 +26,11 @@ public class MousePanel extends JPanel
     private final JLabel mouseSpeedLabel = new JLabel();
     private final JSlider mouseSpeedSlider = new JSlider(0, 4, 2); // default to index=2 (MODERATE)
 
+    // Calibration controls
+    private final JButton calibrateMouseButton = new JButton("Calibrate Mouse");
+    private final JLabel calibrationStatusLabel = new JLabel();
+    private final JButton clearCalibrationButton = new JButton("Clear Calibration");
+
     public MousePanel()
     {
         useNaturalMouse.setToolTipText("Simulate human-like mouse movements");
@@ -33,6 +39,9 @@ public class MousePanel extends JPanel
         moveMouseOffScreenChance.setToolTipText("Chance to move the mouse off screen when activity cooldown is active");
         moveMouseRandomly.setToolTipText("Move the mouse randomly when activity cooldown is active");
         moveMouseRandomlyChance.setToolTipText("Chance to move the mouse randomly when activity cooldown is active");
+
+        calibrateMouseButton.setToolTipText("Record your natural mouse movements to personalize the humanization algorithm");
+        clearCalibrationButton.setToolTipText("Remove calibration data and revert to default mouse profiles");
 
         // Configure the new mouseSpeedSlider
         mouseSpeedSlider.setToolTipText("Controls the overall mouse speed/intensity");
@@ -81,6 +90,20 @@ public class MousePanel extends JPanel
         gbc.fill = GridBagConstraints.HORIZONTAL;
         add(mouseSpeedSlider, gbc);
 
+        // Calibration section separator
+        gbc.fill = GridBagConstraints.NONE;
+        add(Box.createVerticalStrut(15), gbc);
+
+        // Calibration status
+        add(calibrationStatusLabel, gbc);
+
+        // Calibrate button
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        add(calibrateMouseButton, gbc);
+
+        // Clear calibration button
+        add(clearCalibrationButton, gbc);
+
         setupActionListeners();
 
         // Make sure the default values on the UI match the current settings
@@ -126,6 +149,17 @@ public class MousePanel extends JPanel
             Rs2Antiban.setActivityIntensity(intensity);
             mouseSpeedLabel.setText("Mouse Speed: " + intensity.getName()); // or getName(), etc.
         });
+
+        // Calibration button listeners
+        calibrateMouseButton.addActionListener(e -> {
+            MouseCalibrationService.startCalibration(SwingUtilities.getWindowAncestor(this));
+            updateCalibrationStatus();
+        });
+
+        clearCalibrationButton.addActionListener(e -> {
+            MouseCalibrationService.clearCalibration();
+            updateCalibrationStatus();
+        });
     }
 
     public void updateValues()
@@ -142,6 +176,24 @@ public class MousePanel extends JPanel
         ActivityIntensity currentIntensity = Rs2Antiban.getActivityIntensity();
         mouseSpeedSlider.setValue(getIndexFromActivityIntensity(currentIntensity));
         mouseSpeedLabel.setText("Mouse Speed: " + currentIntensity.getName());
+
+        updateCalibrationStatus();
+    }
+
+    private void updateCalibrationStatus()
+    {
+        boolean calibrated = MouseCalibrationService.isCalibrated();
+        if (calibrated)
+        {
+            calibrationStatusLabel.setText("Status: Calibrated");
+            calibrationStatusLabel.setForeground(new Color(0, 200, 0));
+        }
+        else
+        {
+            calibrationStatusLabel.setText("Status: Not calibrated");
+            calibrationStatusLabel.setForeground(Color.GRAY);
+        }
+        clearCalibrationButton.setVisible(calibrated);
     }
 
     // Helper to convert ActivityIntensity -> slider index
