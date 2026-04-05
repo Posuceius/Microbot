@@ -1036,7 +1036,6 @@ public class Rs2Walker {
     private static boolean handleDoors(List<WorldPoint> path, int index) {
         if (ShortestPathPlugin.getPathfinder() == null || index >= path.size() - 1) return false;
 
-        List<String> doorActions = List.of("pay-toll", "pick-lock", "walk-through", "go-through", "open");
         boolean isInstance = Microbot.getClient()
                 .getTopLevelWorldView()
                 .getScene()
@@ -1082,48 +1081,7 @@ public class Rs2Walker {
                 WorldPoint playerLoc = Rs2Player.getWorldLocation();
                 if (!adjacentToPath || playerLoc == null || !Objects.equals(probe.getPlane(), playerLoc.getPlane())) continue;
 
-                WallObject wall = Rs2GameObject.getWallObject(o -> o.getWorldLocation().equals(probe), probe, 3);
-
-                TileObject object = (wall != null)
-                        ? wall
-                        : Rs2GameObject.getGameObject(o -> o.getWorldLocation().equals(probe), probe, 3);
-                if (object == null) continue;
-
-                ObjectComposition comp = Rs2GameObject.convertToObjectComposition(object);
-                // Ignore imposter objects
-                if (comp == null || comp.getImpostorIds() != null || comp.getName().equals("null")) continue;
-
-                String action = Arrays.stream(comp.getActions())
-                        .filter(Objects::nonNull)
-                        .filter(act -> doorActions.stream().anyMatch(dact -> act.toLowerCase().startsWith(dact.toLowerCase())))
-                        .min(Comparator.comparing(act -> doorActions.indexOf(doorActions.stream().filter(dact -> act.toLowerCase().startsWith(dact)).findFirst().orElse(""))))
-                        .orElse(null);
-
-                if (action == null) continue;
-
-                boolean found = false;
-
-                final String name = comp.getName();
-
-                if (object instanceof WallObject) {
-                    int orientation = ((WallObject) object).getOrientationA();
-
-                    if (searchNeighborPoint(orientation, probe, fromWp) || searchNeighborPoint(orientation, probe, toWp)) {
-                        log.info("Found WallObject door - name {} with action {} at {} - from {} to {}", name, action, probe, fromWp, toWp);
-                        found = true;
-                    }
-                } else {
-                    if (name != null && name.toLowerCase().contains("door")) {
-                        log.info("Found GameObject door - name {} with action {} at {} - from {} to {}", name, action, probe, fromWp, toWp);
-                        found = true;
-                    }
-                }
-
-                if (found) {
-                    if (!handleDoorException(object, action)) {
-                        Rs2GameObject.interact(object, action);
-                        Rs2Player.waitForWalking();
-                    }
+                if (Rs2GameObject.tryOpenDoorAt(probe)) {
                     return true;
                 }
             }

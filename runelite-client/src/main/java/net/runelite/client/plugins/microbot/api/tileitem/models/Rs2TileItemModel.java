@@ -7,9 +7,12 @@ import net.runelite.api.coords.LocalPoint;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.api.IEntity;
+import net.runelite.client.plugins.microbot.util.gameobject.Rs2GameObject;
 import net.runelite.client.plugins.microbot.util.menu.NewMenuEntry;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.plugins.microbot.util.reflection.Rs2Reflection;
+import net.runelite.client.plugins.microbot.util.tile.Rs2Tile;
+import static net.runelite.client.plugins.microbot.util.Global.*;
 
 import java.awt.*;
 import java.util.function.Supplier;
@@ -202,6 +205,14 @@ public class Rs2TileItemModel implements TileItem, IEntity {
     }
 
     public boolean click(String action) {
+        // Check if the ground item's tile is reachable; if not, try opening blocking doors
+        WorldPoint itemLocation = getWorldLocation();
+        if (itemLocation != null && !Rs2Tile.isTileReachable(itemLocation)) {
+            if (Rs2GameObject.handleBlockingDoors(itemLocation)) {
+                sleepUntil(() -> Rs2Tile.isTileReachable(itemLocation), 2000);
+            }
+        }
+
         try {
             int param0;
             int param1;
