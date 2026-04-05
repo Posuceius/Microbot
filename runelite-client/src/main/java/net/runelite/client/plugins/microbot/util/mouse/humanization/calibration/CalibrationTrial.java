@@ -139,10 +139,10 @@ public class CalibrationTrial
 	 * Categorizes the straight-line distance from start to target into one of four
 	 * bands used to group trials by movement scale during profile analysis:
 	 * <ul>
-	 *   <li>0 - short range: 0 to 100 pixels</li>
-	 *   <li>1 - medium range: 100 to 300 pixels</li>
-	 *   <li>2 - long range: 300 to 600 pixels</li>
-	 *   <li>3 - very long range: 600 or more pixels</li>
+	 *   <li>0 - short range: 0 to 99 pixels (distance &lt; 100)</li>
+	 *   <li>1 - medium range: 100 to 299 pixels (distance &lt; 300)</li>
+	 *   <li>2 - long range: 300 to 599 pixels (distance &lt; 600)</li>
+	 *   <li>3 - very long range: 600+ pixels</li>
 	 * </ul>
 	 *
 	 * @return the distance band index (0-3)
@@ -183,6 +183,7 @@ public class CalibrationTrial
 		}
 		long firstTimestamp = samples.get(0).getTimestampMs();
 		long lastTimestamp = samples.get(samples.size() - 1).getTimestampMs();
-		return lastTimestamp - firstTimestamp;
+		long duration = lastTimestamp - firstTimestamp;
+		return Math.max(0, duration);
 	}
 }

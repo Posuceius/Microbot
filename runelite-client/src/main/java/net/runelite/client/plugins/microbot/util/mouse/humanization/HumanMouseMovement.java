@@ -486,11 +486,28 @@ public class HumanMouseMovement
 
 	/**
 	 * Calculates the pre-click dwell time (pause before clicking after arriving at target).
+	 * Uses the active MouseProfile's calibrated values when available, falling back to
+	 * hardcoded defaults otherwise.
+	 */
+	public static long calculatePreClickDwellMs(MouseProfile profile)
+	{
+		double minMs = PRE_CLICK_DWELL_MIN_MS;
+		double maxMs = PRE_CLICK_DWELL_MAX_MS;
+		if (profile != null && profile.getPreClickDwellMaxMs() > profile.getPreClickDwellMinMs())
+		{
+			minMs = profile.getPreClickDwellMinMs();
+			maxMs = profile.getPreClickDwellMaxMs();
+		}
+		return (long)(minMs + ThreadLocalRandom.current().nextDouble() * (maxMs - minMs));
+	}
+
+	/**
+	 * Calculates the pre-click dwell time using hardcoded defaults.
+	 * Kept for backwards compatibility with callers that don't have a profile.
 	 */
 	public static long calculatePreClickDwellMs()
 	{
-		return (long)(PRE_CLICK_DWELL_MIN_MS
-			+ ThreadLocalRandom.current().nextDouble() * (PRE_CLICK_DWELL_MAX_MS - PRE_CLICK_DWELL_MIN_MS));
+		return calculatePreClickDwellMs(null);
 	}
 
 	/**
