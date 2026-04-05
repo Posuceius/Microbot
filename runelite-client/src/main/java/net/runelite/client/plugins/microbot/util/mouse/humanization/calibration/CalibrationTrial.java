@@ -43,13 +43,13 @@ public class CalibrationTrial
 		long mouseUpTimestampMs,
 		Point clickPosition)
 	{
-		this.startPosition = startPosition;
-		this.targetPosition = targetPosition;
+		this.startPosition = new Point(startPosition);
+		this.targetPosition = new Point(targetPosition);
 		this.targetRadius = targetRadius;
 		this.samples = new ArrayList<>(samples);
 		this.mouseDownTimestampMs = mouseDownTimestampMs;
 		this.mouseUpTimestampMs = mouseUpTimestampMs;
-		this.clickPosition = clickPosition;
+		this.clickPosition = new Point(clickPosition);
 	}
 
 	/**
@@ -59,7 +59,7 @@ public class CalibrationTrial
 	 */
 	public Point getStartPosition()
 	{
-		return startPosition;
+		return new Point(startPosition);
 	}
 
 	/**
@@ -69,7 +69,7 @@ public class CalibrationTrial
 	 */
 	public Point getTargetPosition()
 	{
-		return targetPosition;
+		return new Point(targetPosition);
 	}
 
 	/**
@@ -119,7 +119,7 @@ public class CalibrationTrial
 	 */
 	public Point getClickPosition()
 	{
-		return clickPosition;
+		return new Point(clickPosition);
 	}
 
 	/**

@@ -204,7 +204,10 @@ public class HumanMouseMovement
 		}
 
 		// Overshoot: scaled by distance (never for short moves)
-		boolean shouldOvershoot = ThreadLocalRandom.current().nextDouble() < (profile.getOvershootProbability() * overshootScale);
+		// motionProfile.getOvershootCount() acts as an enable/disable gate - 0 means overshoots are fully disabled
+		int maxOvershoots = profile.getMotionProfile().getOvershootCount();
+		boolean shouldOvershoot = maxOvershoots > 0
+			&& ThreadLocalRandom.current().nextDouble() < (profile.getOvershootProbability() * overshootScale);
 
 		if (shouldOvershoot)
 		{
@@ -387,7 +390,9 @@ public class HumanMouseMovement
 				double noisiness = Math.max(0, (8.0 - stepPixelSize)) / 50.0;
 				if (ThreadLocalRandom.current().nextDouble() < noisiness)
 				{
-					double noiseAmplitude = Math.max(0, (8.0 - stepPixelSize)) / noisinessDivider;
+					double baseNoiseAmplitude = Math.max(0, (8.0 - stepPixelSize)) / noisinessDivider;
+					double tremorScale = profile.getTremorAmplitude() / 1.5; // Normalize around default (1.5)
+					double noiseAmplitude = baseNoiseAmplitude * tremorScale;
 					noiseX = (ThreadLocalRandom.current().nextDouble() - 0.5) * noiseAmplitude;
 					noiseY = (ThreadLocalRandom.current().nextDouble() - 0.5) * noiseAmplitude;
 				}
@@ -458,7 +463,24 @@ public class HumanMouseMovement
 			return 50;
 		}
 
-		// Use calibrated distance-speed profile data
+		// Use Fitts's Law: MT = a + b * log2(D/W + 1)
+		double fittsIntercept = profile.getFittsIntercept();
+		double fittsSlope = profile.getFittsSlope();
+
+		if (fittsIntercept > 0 && fittsSlope > 0)
+		{
+			double effectiveTargetWidth = Math.max(1.0, targetWidth);
+			double indexOfDifficulty = Math.log(distance / effectiveTargetWidth + 1) / Math.log(2);
+			long durationMs = (long) (fittsIntercept + fittsSlope * indexOfDifficulty);
+
+			// Apply personal variance from profile
+			double varianceFactor = 1.0 + (ThreadLocalRandom.current().nextGaussian() * profile.getFittsVariance());
+			varianceFactor = Math.max(0.7, Math.min(1.3, varianceFactor));
+
+			return Math.max(30, (long) (durationMs * varianceFactor));
+		}
+
+		// Fallback to distance-speed profile data
 		return profile.getMovementDurationForDistance(distance);
 	}
 

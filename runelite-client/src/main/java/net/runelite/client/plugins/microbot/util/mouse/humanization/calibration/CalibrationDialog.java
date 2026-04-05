@@ -55,6 +55,7 @@ public class CalibrationDialog extends JDialog
 	private boolean calibrationComplete;
 	private boolean cancelled;
 	private final JPanel canvasPanel;
+	private javax.swing.Timer closeTimer;
 
 	/**
 	 * Constructs and initialises the calibration dialog. The dialog is modal and
@@ -97,6 +98,12 @@ public class CalibrationDialog extends JDialog
 			public void windowClosing(WindowEvent windowEvent)
 			{
 				cancelCalibration();
+			}
+
+			@Override
+			public void windowOpened(WindowEvent windowEvent)
+			{
+				SwingUtilities.invokeLater(() -> placeNextDot());
 			}
 		});
 
@@ -211,8 +218,6 @@ public class CalibrationDialog extends JDialog
 		log.info("CalibrationDialog: initialised with {} trials across {} distance bands",
 			TOTAL_TRIALS, TRIAL_DISTANCES.length);
 
-		placeNextDot();
-
 		canvasPanel.requestFocusInWindow();
 	}
 
@@ -229,7 +234,7 @@ public class CalibrationDialog extends JDialog
 			calibrationComplete = true;
 			log.info("CalibrationDialog: all {} trials complete - dialog will close shortly", TOTAL_TRIALS);
 			canvasPanel.repaint();
-			javax.swing.Timer closeTimer = new javax.swing.Timer(1500, event -> dispose());
+			closeTimer = new javax.swing.Timer(1500, event -> dispose());
 			closeTimer.setRepeats(false);
 			closeTimer.start();
 			return;
@@ -237,17 +242,9 @@ public class CalibrationDialog extends JDialog
 
 		int targetDistance = shuffledDistances.get(currentTrialIndex);
 
-		Point startPosition;
-		if (currentTrialIndex == 0)
-		{
-			startPosition = new Point(DIALOG_WIDTH / 2, DIALOG_HEIGHT / 2);
-		}
-		else
-		{
-			Point mouseOnScreen = MouseInfo.getPointerInfo().getLocation();
-			SwingUtilities.convertPointFromScreen(mouseOnScreen, canvasPanel);
-			startPosition = mouseOnScreen;
-		}
+		Point mouseOnScreen = MouseInfo.getPointerInfo().getLocation();
+		SwingUtilities.convertPointFromScreen(mouseOnScreen, canvasPanel);
+		Point startPosition = mouseOnScreen;
 
 		currentDotCenter = calculateDotPosition(startPosition, targetDistance);
 
@@ -326,6 +323,11 @@ public class CalibrationDialog extends JDialog
 	{
 		log.info("CalibrationDialog: session restarted - discarding {} completed trials",
 			recorder.getCompletedTrialCount());
+		if (closeTimer != null)
+		{
+			closeTimer.stop();
+			closeTimer = null;
+		}
 		recorder.reset();
 		currentTrialIndex = 0;
 		calibrationComplete = false;

@@ -55,6 +55,8 @@ public class CalibrationRecorder implements MouseListener, MouseMotionListener
 		this.currentTargetPosition = targetPosition;
 		this.currentTargetRadius = targetRadius;
 		this.currentSamples = new ArrayList<>();
+		this.currentMouseDownTimestampMs = 0;
+		this.currentClickPosition = null;
 		this.recording = true;
 		log.info("CalibrationRecorder: trial started - start={},{} target={},{} radius={}",
 			startPosition.x, startPosition.y,
@@ -176,7 +178,10 @@ public class CalibrationRecorder implements MouseListener, MouseMotionListener
 			return;
 		}
 
-		double distanceFromTarget = currentClickPosition.distance(currentTargetPosition);
+		Point releasePosition = new Point(mouseEvent.getX(), mouseEvent.getY());
+		currentSamples.add(new CalibrationSample(releasePosition.x, releasePosition.y, System.currentTimeMillis()));
+
+		double distanceFromTarget = releasePosition.distance(currentTargetPosition);
 		boolean clickLandedOnTarget = distanceFromTarget <= currentTargetRadius;
 
 		if (!clickLandedOnTarget)
@@ -195,7 +200,7 @@ public class CalibrationRecorder implements MouseListener, MouseMotionListener
 			currentSamples,
 			currentMouseDownTimestampMs,
 			mouseUpTimestampMs,
-			currentClickPosition
+			releasePosition
 		);
 
 		completedTrials.add(completedTrial);
@@ -206,7 +211,7 @@ public class CalibrationRecorder implements MouseListener, MouseMotionListener
 			String.format("%.1f", completedTrial.getDistance()),
 			completedTrial.getDistanceBand(),
 			completedTrial.getMovementDurationMs(),
-			currentClickPosition.x, currentClickPosition.y);
+			releasePosition.x, releasePosition.y);
 	}
 
 	/**

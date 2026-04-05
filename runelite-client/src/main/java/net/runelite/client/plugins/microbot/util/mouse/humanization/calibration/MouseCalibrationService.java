@@ -1,5 +1,6 @@
 package net.runelite.client.plugins.microbot.util.mouse.humanization.calibration;
 
+import com.google.gson.Gson;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.client.plugins.microbot.util.antiban.enums.ActivityIntensity;
 import net.runelite.client.plugins.microbot.util.mouse.humanization.MotionProfile;
@@ -133,7 +134,16 @@ public final class MouseCalibrationService
 	 */
 	public static MouseProfile getCalibratedBaseline()
 	{
-		return loadBaseline();
+		MouseProfile baseline = loadBaseline();
+		if (baseline == null)
+		{
+			return null;
+		}
+		// Return a defensive copy to prevent callers from mutating the cached instance
+		Gson gson = new Gson();
+		MouseProfile copy = gson.fromJson(gson.toJson(baseline), MouseProfile.class);
+		copy.setMotionProfile(MotionProfile.normalGamer());
+		return copy;
 	}
 
 	/**

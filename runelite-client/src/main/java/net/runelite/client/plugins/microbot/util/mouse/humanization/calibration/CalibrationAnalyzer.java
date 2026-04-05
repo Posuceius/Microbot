@@ -108,8 +108,8 @@ public final class CalibrationAnalyzer
 
 			if (clickDistanceFromTarget > maximumAllowedClickDistance)
 			{
-				log.warn("Discarding trial: click landed {:.1f}px from target (maximum {:.1f}px)",
-					clickDistanceFromTarget, maximumAllowedClickDistance);
+				log.warn("Discarding trial: click landed {}px from target (maximum {}px)",
+					String.format("%.1f", clickDistanceFromTarget), String.format("%.1f", maximumAllowedClickDistance));
 				continue;
 			}
 
@@ -247,8 +247,8 @@ public final class CalibrationAnalyzer
 				double[] speedArray = bandSpeeds.stream().mapToDouble(Double::doubleValue).toArray();
 				bandMedianSpeeds[bandIndex] = median(speedArray);
 				bandHasData[bandIndex] = true;
-				log.debug("Distance band {}: {} trials, median speed = {:.3f} px/ms",
-					bandIndex, bandSpeeds.size(), bandMedianSpeeds[bandIndex]);
+				log.debug("Distance band {}: {} trials, median speed = {} px/ms",
+					bandIndex, bandSpeeds.size(), String.format("%.3f", bandMedianSpeeds[bandIndex]));
 			}
 		}
 
@@ -297,7 +297,7 @@ public final class CalibrationAnalyzer
 					bandMedianSpeeds[bandIndex] = 0.9; // fallback default
 				}
 
-				log.debug("Distance band {} had no data - interpolated to {:.3f} px/ms", bandIndex, bandMedianSpeeds[bandIndex]);
+				log.debug("Distance band {} had no data - interpolated to {} px/ms", bandIndex, String.format("%.3f", bandMedianSpeeds[bandIndex]));
 			}
 		}
 
@@ -358,7 +358,7 @@ public final class CalibrationAnalyzer
 		slope = clamp(slope, 30.0, 300.0);
 		variance = clamp(variance, 0.05, 0.40);
 
-		log.debug("Fitts's Law: intercept={:.2f}, slope={:.2f}, variance={:.3f}", intercept, slope, variance);
+		log.debug("Fitts's Law: intercept={}, slope={}, variance={}", String.format("%.2f", intercept), String.format("%.2f", slope), String.format("%.3f", variance));
 
 		profile.setFittsIntercept(intercept);
 		profile.setFittsSlope(slope);
@@ -441,8 +441,8 @@ public final class CalibrationAnalyzer
 			-1.0, 1.0
 		);
 
-		log.debug("Curvature: min={:.3f}, max={:.3f}, bias={:.3f} ({} right, {} left)",
-			curveIntensityMin, curveIntensityMax, curveBiasDirection, rightDeviationCount, leftDeviationCount);
+		log.debug("Curvature: min={}, max={}, bias={} ({} right, {} left)",
+			String.format("%.3f", curveIntensityMin), String.format("%.3f", curveIntensityMax), String.format("%.3f", curveBiasDirection), rightDeviationCount, leftDeviationCount);
 
 		profile.setCurveIntensityMin(curveIntensityMin);
 		profile.setCurveIntensityMax(curveIntensityMax);
@@ -510,7 +510,7 @@ public final class CalibrationAnalyzer
 		double[] peakFractionArray = peakFractions.stream().mapToDouble(Double::doubleValue).toArray();
 		double medianPeakFraction = clamp(median(peakFractionArray), 0.20, 0.60);
 
-		log.debug("Peak velocity position: {:.3f} (median across {} trials)", medianPeakFraction, peakFractions.size());
+		log.debug("Peak velocity position: {} (median across {} trials)", String.format("%.3f", medianPeakFraction), peakFractions.size());
 
 		profile.setPeakVelocityPosition(medianPeakFraction);
 	}
@@ -595,8 +595,8 @@ public final class CalibrationAnalyzer
 		double overshootMinPixels = clamp(percentile(sortedMagnitudes, 0.10), 1.0, 50.0);
 		double overshootMaxPixels = clamp(percentile(sortedMagnitudes, 0.90), 2.0, 80.0);
 
-		log.debug("Overshoot: probability={:.3f}, min={:.1f}px, max={:.1f}px ({} of {} trials)",
-			overshootProbability, overshootMinPixels, overshootMaxPixels, overshootTrialCount, totalTrials);
+		log.debug("Overshoot: probability={}, min={}px, max={}px ({} of {} trials)",
+			String.format("%.3f", overshootProbability), String.format("%.1f", overshootMinPixels), String.format("%.1f", overshootMaxPixels), overshootTrialCount, totalTrials);
 
 		profile.setOvershootProbability(overshootProbability);
 		profile.setOvershootMinPixels(overshootMinPixels);
@@ -676,7 +676,7 @@ public final class CalibrationAnalyzer
 		double[] tremorArray = trialTremorStdDevs.stream().mapToDouble(Double::doubleValue).toArray();
 		double medianTremorAmplitude = clamp(median(tremorArray), 0.2, 5.0);
 
-		log.debug("Tremor amplitude: {:.3f}px (median across {} trials)", medianTremorAmplitude, trialTremorStdDevs.size());
+		log.debug("Tremor amplitude: {}px (median across {} trials)", String.format("%.3f", medianTremorAmplitude), trialTremorStdDevs.size());
 
 		profile.setTremorAmplitude(medianTremorAmplitude);
 	}
@@ -780,8 +780,8 @@ public final class CalibrationAnalyzer
 		double hesitationMinMs = clamp(percentile(sortedDurations, 0.10), 20.0, 500.0);
 		double hesitationMaxMs = clamp(percentile(sortedDurations, 0.90), 50.0, 1000.0);
 
-		log.debug("Hesitation: probability={:.3f}, min={:.0f}ms, max={:.0f}ms ({} of {} trials)",
-			hesitationProbability, hesitationMinMs, hesitationMaxMs, trialsWithHesitation, totalTrials);
+		log.debug("Hesitation: probability={}, min={}ms, max={}ms ({} of {} trials)",
+			String.format("%.3f", hesitationProbability), String.format("%.0f", hesitationMinMs), String.format("%.0f", hesitationMaxMs), trialsWithHesitation, totalTrials);
 
 		profile.setHesitationProbability(hesitationProbability);
 		profile.setHesitationMinMs(hesitationMinMs);
@@ -893,8 +893,8 @@ public final class CalibrationAnalyzer
 		double submovementPauseMinMs = clamp(percentile(sortedDipDurations, 0.25), 10.0, 200.0);
 		double submovementPauseMaxMs = clamp(percentile(sortedDipDurations, 0.75), 20.0, 400.0);
 
-		log.debug("Submovement pauses: min={:.0f}ms, max={:.0f}ms from {} dip observations",
-			submovementPauseMinMs, submovementPauseMaxMs, dipDurations.size());
+		log.debug("Submovement pauses: min={}ms, max={}ms from {} dip observations",
+			String.format("%.0f", submovementPauseMinMs), String.format("%.0f", submovementPauseMaxMs), dipDurations.size());
 
 		profile.setSubmovementPauseMinMs(submovementPauseMinMs);
 		profile.setSubmovementPauseMaxMs(submovementPauseMaxMs);
@@ -984,7 +984,7 @@ public final class CalibrationAnalyzer
 			double[] sortedHoldDurations = clickHoldDurations.stream().mapToDouble(Double::doubleValue).sorted().toArray();
 			double clickHoldMinMs = clamp(percentile(sortedHoldDurations, 0.10), 10.0, 200.0);
 			double clickHoldMaxMs = clamp(percentile(sortedHoldDurations, 0.90), 30.0, 500.0);
-			log.debug("Click hold: min={:.0f}ms, max={:.0f}ms", clickHoldMinMs, clickHoldMaxMs);
+			log.debug("Click hold: min={}ms, max={}ms", String.format("%.0f", clickHoldMinMs), String.format("%.0f", clickHoldMaxMs));
 			profile.setClickHoldMinMs(clickHoldMinMs);
 			profile.setClickHoldMaxMs(clickHoldMaxMs);
 		}
@@ -994,7 +994,7 @@ public final class CalibrationAnalyzer
 		{
 			double[] driftArray = clickDriftDistances.stream().mapToDouble(Double::doubleValue).toArray();
 			double clickDriftPixels = clamp(median(driftArray), 0.0, 10.0);
-			log.debug("Click drift: {:.2f}px median", clickDriftPixels);
+			log.debug("Click drift: {}px median", String.format("%.2f", clickDriftPixels));
 			profile.setClickDriftPixels(clickDriftPixels);
 		}
 
@@ -1004,7 +1004,7 @@ public final class CalibrationAnalyzer
 			double[] sortedDwellDurations = preClickDwellDurations.stream().mapToDouble(Double::doubleValue).sorted().toArray();
 			double preClickDwellMinMs = clamp(percentile(sortedDwellDurations, 0.10), 5.0, 200.0);
 			double preClickDwellMaxMs = clamp(percentile(sortedDwellDurations, 0.90), 10.0, 500.0);
-			log.debug("Pre-click dwell: min={:.0f}ms, max={:.0f}ms", preClickDwellMinMs, preClickDwellMaxMs);
+			log.debug("Pre-click dwell: min={}ms, max={}ms", String.format("%.0f", preClickDwellMinMs), String.format("%.0f", preClickDwellMaxMs));
 			profile.setPreClickDwellMinMs(preClickDwellMinMs);
 			profile.setPreClickDwellMaxMs(preClickDwellMaxMs);
 		}
