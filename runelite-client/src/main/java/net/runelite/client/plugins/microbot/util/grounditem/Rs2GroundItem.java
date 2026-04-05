@@ -20,6 +20,7 @@ import java.awt.*;
 import java.time.Instant;
 import java.util.List;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BooleanSupplier;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -34,6 +35,10 @@ import static net.runelite.client.plugins.microbot.util.Global.sleepUntil;
 @Deprecated(since = "2.1.0 - Use Rs2TileItemCache/Rs2TileItemQuery instead", forRemoval = true)
 public class Rs2GroundItem {
     private static final int DESPAWN_DELAY_THRESHOLD_TICKS = 150;
+
+	// Blacklisted ground items (location key format: "x:y:plane:itemId:spawnTimeMs") - items the server rejected (e.g., ironman can't take)
+	private static final Set<String> lootBlacklist = ConcurrentHashMap.newKeySet();
+	private static volatile GroundItem lastInteractedItem = null;
 
     public static boolean runWhilePaused(BooleanSupplier booleanSupplier) {
         final boolean paused = Microbot.pauseAllScripts.getAndSet(true);
@@ -141,6 +146,7 @@ public class Rs2GroundItem {
     }
 
     public static boolean interact(GroundItem groundItem) {
+        setLastInteractedItem(groundItem);
         return interact(new InteractModel(groundItem.getId(), groundItem.getLocation(), groundItem.getName()), "Take");
     }
 
@@ -279,7 +285,71 @@ public class Rs2GroundItem {
         return groundItem != getGroundItems().get(groundItem.getLocation(), groundItem.getId());
     }
 
+	/**
+	 * Creates a unique key for a ground item based on its location, ID, and spawn time.
+	 * Including spawn time ensures each unique spawn is tracked separately (prevents collision
+	 * when the same item respawns at the same location).
+	 */
+	private static String getBlacklistKey(GroundItem groundItem) {
+		Instant spawnTime = groundItem.getSpawnTime();
+		String spawnId = (spawnTime != null) ? String.valueOf(spawnTime.toEpochMilli()) : "0";
+		return groundItem.getLocation().getX() + ":"
+			+ groundItem.getLocation().getY() + ":"
+			+ groundItem.getLocation().getPlane() + ":"
+			+ groundItem.getId() + ":"
+			+ spawnId;
+	}
+
+	/**
+	 * Blacklists a ground item so the loot system will skip it on future passes.
+	 * Used when the server rejects a pickup attempt (e.g., ironman restrictions).
+	 */
+	public static void blacklistItem(GroundItem groundItem) {
+		String key = getBlacklistKey(groundItem);
+		lootBlacklist.add(key);
+		log.info("Blacklisted ground item: {} at {}", groundItem.getName(), groundItem.getLocation());
+	}
+
+	/**
+	 * Checks if a ground item has been blacklisted.
+	 */
+	public static boolean isBlacklisted(GroundItem groundItem) {
+		return lootBlacklist.contains(getBlacklistKey(groundItem));
+	}
+
+	/**
+	 * Clears all blacklisted items. Called periodically to remove stale entries.
+	 */
+	public static void clearBlacklist() {
+		if (!lootBlacklist.isEmpty()) {
+			log.info("Clearing {} blacklisted ground items", lootBlacklist.size());
+			lootBlacklist.clear();
+		}
+	}
+
+	/**
+	 * Records the last ground item the player interacted with.
+	 * Used to identify which item triggered a server rejection message.
+	 */
+	public static void setLastInteractedItem(GroundItem groundItem) {
+		lastInteractedItem = groundItem;
+	}
+
+	/**
+	 * Blacklists the most recently interacted ground item.
+	 * Called when an ironman rejection chat message is detected.
+	 */
+	public static void blacklistLastInteractedItem() {
+		if (lastInteractedItem != null) {
+			blacklistItem(lastInteractedItem);
+		}
+	}
+
     public static boolean coreLoot(GroundItem groundItem) {
+        if (isBlacklisted(groundItem)) {
+            log.info("Skipping blacklisted ground item: {} at {}", groundItem.getName(), groundItem.getLocation());
+            return false;
+        }
         int quantity = Math.min(groundItem.isStackable() ? 1 : groundItem.getQuantity(),
                 Rs2Inventory.emptySlotCount());
 
@@ -453,6 +523,7 @@ public class Rs2GroundItem {
     private static boolean hasLootableItems(Predicate<GroundItem> filter) {
         List<GroundItem> groundItems = getGroundItems().values().stream()
                 .filter(filter)
+                .filter(gi -> !isBlacklisted(gi))  // Exclude blacklisted items from loot validation
                 .collect(Collectors.toList());
 
         return !groundItems.isEmpty();
