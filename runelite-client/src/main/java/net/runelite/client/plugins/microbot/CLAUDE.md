@@ -135,6 +135,56 @@ sleepUntil(() -> Rs2Bank.isOpen(), 5000);
 
 ---
 
+## Tick-Aligned Detection
+
+The framework provides tick-aligned detection to reduce latency between game state changes and script reactions. Game state only changes on server ticks (~600ms), so checking between ticks is wasted work.
+
+### Tick-Aligned sleepUntil
+
+The standard `sleepUntil()` method wakes on game tick boundaries instead of polling every 100ms. This is automatic - all existing scripts benefit without code changes:
+
+```java
+// Same API, same thread, same behavior - just detects faster
+sleepUntil(() -> Rs2Bank.isOpen(), 5000);  // wakes when tick fires, not 100ms later
+```
+
+### scheduleOnGameTick (Opt-In)
+
+Scripts can opt into tick-aligned loop execution instead of wall-clock timing:
+
+```java
+// BEFORE: runs every 600ms wall-clock (drifts relative to ticks)
+mainScheduledFuture = scheduledExecutorService.scheduleWithFixedDelay(body, 0, 600, TimeUnit.MILLISECONDS);
+
+// AFTER: runs exactly once per game tick
+mainScheduledFuture = scheduleOnGameTick(body);
+```
+
+The loop body runs on a script thread where all Rs2 utilities and sleeps work normally. This is purely opt-in - existing scripts using `scheduleWithFixedDelay` continue to work unchanged.
+
+### Additional Tick Utilities
+
+```java
+// Block until the next game tick fires
+sleepUntilNextTick();
+
+// Block for exactly N game ticks
+sleepForTicks(3);
+
+// With custom wall-clock timeout safety
+sleepForTicks(3, 5000);
+```
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `util/tick/TickDispatcher.java` | Singleton that signals script threads on each game tick |
+| `util/tick/TickWaiter.java` | Thread synchronization primitive for tick-aligned sleep |
+| `util/tick/TickListener.java` | Callback interface for tick notifications |
+
+---
+
 ## Utility System (util/ folder)
 
 The utility system provides static facade classes prefixed with `Rs2*` that abstract RuneLite API interactions.

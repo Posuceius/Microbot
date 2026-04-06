@@ -46,6 +46,33 @@ public abstract class Script extends Global implements IScript {
     protected static WorldPoint initialPlayerLocation;
 
     /**
+     * Schedules the given body to execute once per game tick on a script thread.
+     * Unlike {@code scheduleWithFixedDelay(600ms)} which drifts on wall-clock time,
+     * this wakes exactly when each game tick fires via the {@link net.runelite.client.plugins.microbot.util.tick.TickDispatcher}.
+     * The body runs on a script thread where all Rs2 utilities and sleeps work normally.
+     *
+     * @param body the logic to execute each tick
+     * @return a ScheduledFuture that can be cancelled to stop execution
+     */
+    protected ScheduledFuture<?> scheduleOnGameTick(Runnable body) {
+        return scheduledExecutorService.schedule(() -> {
+            while (!Thread.currentThread().isInterrupted()) {
+                try {
+                    Global.sleepUntilNextTick();
+                    if (Thread.currentThread().isInterrupted()) break;
+                    body.run();
+                } catch (Exception exception) {
+                    if (exception instanceof InterruptedException) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
+                    Microbot.logStackTrace("scheduleOnGameTick: ", exception);
+                }
+            }
+        }, 0, java.util.concurrent.TimeUnit.MILLISECONDS);
+    }
+
+    /**
      * Cancel scheduled tasks, clear shared state, and reset helpers.
      * Safe to call multiple times; no-ops if already shut down.
      */

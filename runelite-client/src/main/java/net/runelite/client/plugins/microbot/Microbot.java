@@ -49,6 +49,7 @@ import net.runelite.client.plugins.microbot.api.player.Rs2PlayerCache;
 import net.runelite.client.plugins.microbot.api.playerstate.Rs2PlayerStateCache;
 import net.runelite.client.plugins.microbot.api.tileitem.Rs2TileItemCache;
 import net.runelite.client.plugins.microbot.api.tileobject.Rs2TileObjectCache;
+import net.runelite.client.plugins.microbot.util.tick.TickDispatcher;
 import net.runelite.client.plugins.microbot.util.security.LoginManager;
 import net.runelite.client.plugins.microbot.util.widget.Rs2Widget;
 import net.runelite.client.ui.overlay.infobox.InfoBoxManager;
@@ -194,6 +195,10 @@ public class Microbot {
     @Inject
     @Getter
     private static Rs2PlayerStateCache rs2PlayerStateCache;
+
+    @Inject
+    @Getter
+    private static TickDispatcher tickDispatcher;
 
     @Inject
     @Getter
