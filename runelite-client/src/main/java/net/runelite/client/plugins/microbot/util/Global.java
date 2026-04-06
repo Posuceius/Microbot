@@ -3,6 +3,8 @@ package net.runelite.client.plugins.microbot.util;
 import lombok.SneakyThrows;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.util.math.Rs2Random;
+import net.runelite.client.plugins.microbot.util.tick.TickDispatcher;
+import net.runelite.client.plugins.microbot.util.tick.TickWaiter;
 
 import java.util.concurrent.*;
 import java.util.function.BooleanSupplier;
@@ -179,4 +181,98 @@ public class Global {
         int startTick = Microbot.getClient().getTickCount();
         return Global.sleepUntil(() -> Microbot.getClient().getTickCount() >= startTick + ticksToWait, ticksToWait * 600 + 2000);
     }
+
+	/**
+	 * Blocks the calling thread until the next game tick fires.
+	 * No-op if called on the client thread.
+	 */
+	public static void sleepUntilNextTick() {
+		sleepUntilNextTick(2000);
+	}
+
+	/**
+	 * Blocks the calling thread until the next game tick fires, or the wall-clock timeout expires.
+	 * No-op if called on the client thread.
+	 *
+	 * @param wallClockTimeoutMs maximum wall-clock time to wait in milliseconds
+	 * @return true if a tick was received, false if timed out
+	 */
+	public static boolean sleepUntilNextTick(long wallClockTimeoutMs) {
+		if (Microbot.getClient().isClientThread()) return false;
+		TickDispatcher dispatcher = Microbot.getTickDispatcher();
+		if (dispatcher == null) return false;
+		TickWaiter waiter = dispatcher.registerWait(null, 1, wallClockTimeoutMs);
+		return waiter.await();
+	}
+
+	/**
+	 * Blocks the calling thread for exactly the given number of game ticks.
+	 * No-op if called on the client thread.
+	 *
+	 * @param ticks number of game ticks to wait
+	 * @return true if all ticks elapsed, false if timed out
+	 */
+	public static boolean sleepForTicks(int ticks) {
+		return sleepForTicks(ticks, ticks * 800L + 2000);
+	}
+
+	/**
+	 * Blocks the calling thread for exactly the given number of game ticks,
+	 * or until the wall-clock timeout expires.
+	 * No-op if called on the client thread.
+	 *
+	 * @param ticks number of game ticks to wait
+	 * @param wallClockTimeoutMs maximum wall-clock time to wait in milliseconds
+	 * @return true if all ticks elapsed, false if timed out
+	 */
+	public static boolean sleepForTicks(int ticks, long wallClockTimeoutMs) {
+		if (Microbot.getClient().isClientThread()) return false;
+		TickDispatcher dispatcher = Microbot.getTickDispatcher();
+		if (dispatcher == null) return false;
+		TickWaiter waiter = dispatcher.registerWait(null, ticks, wallClockTimeoutMs);
+		return waiter.await();
+	}
+
+	/**
+	 * Blocks until the condition becomes true, evaluating it on the client thread at each game tick.
+	 * Unlike {@link #sleepUntil(BooleanSupplier)}, which polls every 100ms, this method evaluates
+	 * the condition exactly on tick boundaries for precise detection.
+	 * No-op if called on the client thread.
+	 *
+	 * @param condition the condition to evaluate on each tick
+	 * @return true if the condition was met, false if timed out
+	 */
+	public static boolean sleepUntilOnTick(BooleanSupplier condition) {
+		return sleepUntilOnTick(condition, 8);
+	}
+
+	/**
+	 * Blocks until the condition becomes true, evaluating it on the client thread at each game tick.
+	 * No-op if called on the client thread.
+	 *
+	 * @param condition the condition to evaluate on each tick
+	 * @param maxTicks maximum number of ticks to wait
+	 * @return true if the condition was met, false if timed out
+	 */
+	public static boolean sleepUntilOnTick(BooleanSupplier condition, int maxTicks) {
+		return sleepUntilOnTick(condition, maxTicks, maxTicks * 800L + 2000);
+	}
+
+	/**
+	 * Blocks until the condition becomes true, evaluating it on the client thread at each game tick,
+	 * or until the tick limit or wall-clock timeout expires.
+	 * No-op if called on the client thread.
+	 *
+	 * @param condition the condition to evaluate on each tick
+	 * @param maxTicks maximum number of ticks to wait
+	 * @param wallClockTimeoutMs maximum wall-clock time to wait in milliseconds
+	 * @return true if the condition was met, false if timed out
+	 */
+	public static boolean sleepUntilOnTick(BooleanSupplier condition, int maxTicks, long wallClockTimeoutMs) {
+		if (Microbot.getClient().isClientThread()) return false;
+		TickDispatcher dispatcher = Microbot.getTickDispatcher();
+		if (dispatcher == null) return false;
+		TickWaiter waiter = dispatcher.registerWait(condition, maxTicks, wallClockTimeoutMs);
+		return waiter.await();
+	}
 }

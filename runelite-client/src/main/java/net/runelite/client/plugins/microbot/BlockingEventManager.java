@@ -212,4 +212,14 @@ public class BlockingEventManager
 
         return true;
     }
+
+    /**
+     * Returns whether a blocking event is currently executing.
+     * Unlike {@link #shouldBlockAndProcess()}, this method is read-only and does not
+     * dequeue or trigger any events. Safe to call from the client thread.
+     */
+    public boolean isBlocking()
+    {
+        return isRunning.get();
+    }
 }
