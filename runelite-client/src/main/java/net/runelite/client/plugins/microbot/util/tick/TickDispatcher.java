@@ -140,11 +140,13 @@ public class TickDispatcher
 		}
 
 		int waiterCount = waiters.size();
+		for (TickWaiter waiter : waiters)
+		{
+			waiter.cancel();
+		}
 		waiters.clear();
 
-		log.info("TickDispatcher cleaning up on logout: orphaned {} waiter(s) "
-				+ "(orphaned waiters will expire via their wall-clock timeout)",
-			waiterCount);
+		log.info("TickDispatcher cleaning up on logout: cancelled and cleared {} orphaned waiter(s)", waiterCount);
 	}
 
 	// -------------------------------------------------------------------------
@@ -196,10 +198,11 @@ public class TickDispatcher
 	 */
 	public TickWaiter registerWait(BooleanSupplier condition, int maxTicks, long wallClockTimeoutMs)
 	{
-		TickWaiter waiter = new TickWaiter(condition, maxTicks, wallClockTimeoutMs, currentTick);
+		int registrationTick = client.getTickCount();
+		TickWaiter waiter = new TickWaiter(condition, maxTicks, wallClockTimeoutMs, registrationTick);
 		waiters.add(waiter);
 		log.debug("TickDispatcher registered TickWaiter (startTick={}, maxTicks={}, wallClockTimeoutMs={}, total pending={})",
-			currentTick, maxTicks, wallClockTimeoutMs, waiters.size());
+			registrationTick, maxTicks, wallClockTimeoutMs, waiters.size());
 		return waiter;
 	}
 

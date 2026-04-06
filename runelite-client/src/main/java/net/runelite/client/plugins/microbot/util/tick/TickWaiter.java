@@ -81,36 +81,40 @@ public class TickWaiter
 	 */
 	boolean evaluateAndSignal(int currentTick)
 	{
+		// Check condition first (even on the boundary tick)
+		if (condition == null)
+		{
+			// For unconditional waits (sleepForTicks), DON'T resolve immediately.
+			// Only the tick timeout check should resolve these.
+			// Fall through to the timeout check below.
+		}
+		else
+		{
+			boolean result;
+			try
+			{
+				result = condition.getAsBoolean();
+			}
+			catch (Exception conditionException)
+			{
+				log.error("TickWaiter condition threw an exception on tick {} - resolving as timed out", currentTick, conditionException);
+				signalCompletion(false);
+				return true;
+			}
+
+			if (result)
+			{
+				log.debug("TickWaiter condition met on tick {}", currentTick);
+				signalCompletion(true);
+				return true;
+			}
+		}
+
+		// Tick timeout check - runs AFTER condition evaluation
 		if (maxTicks > 0 && (currentTick - startTick) >= maxTicks)
 		{
 			log.debug("TickWaiter tick timeout reached after {} ticks (max={})", currentTick - startTick, maxTicks);
-			signalCompletion(false);
-			return true;
-		}
-
-		if (condition == null)
-		{
-			log.debug("TickWaiter unconditional wait resolved on tick {}", currentTick);
-			signalCompletion(true);
-			return true;
-		}
-
-		boolean result;
-		try
-		{
-			result = condition.getAsBoolean();
-		}
-		catch (Exception conditionException)
-		{
-			log.error("TickWaiter condition threw an exception on tick {} - resolving as timed out", currentTick, conditionException);
-			signalCompletion(false);
-			return true;
-		}
-
-		if (result)
-		{
-			log.debug("TickWaiter condition met on tick {}", currentTick);
-			signalCompletion(true);
+			signalCompletion(condition == null); // unconditional waits "succeed" on timeout
 			return true;
 		}
 
@@ -133,6 +137,8 @@ public class TickWaiter
 				if (remainingNanos <= 0)
 				{
 					log.debug("TickWaiter wall-clock deadline expired before condition was met");
+					completed = true;
+					conditionMet = false;
 					return false;
 				}
 
@@ -151,6 +157,15 @@ public class TickWaiter
 		{
 			lock.unlock();
 		}
+	}
+
+	/**
+	 * Cancels this waiter, signaling completion with conditionMet=false.
+	 * Used by TickDispatcher during cleanup (e.g., logout).
+	 */
+	void cancel()
+	{
+		signalCompletion(false);
 	}
 
 	/**

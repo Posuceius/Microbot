@@ -82,7 +82,11 @@ public class Global {
                 if (awaitedCondition.getAsBoolean()) return true;
                 long remaining = deadline - System.currentTimeMillis();
                 if (remaining <= 0) break;
-                sleepUntilNextTick(remaining);
+                if (!sleepUntilNextTick(Math.min(remaining, 600))) {
+                    // Tick-based wake not available (dispatcher null or no tick fired within timeout).
+                    // Fall back to a short sleep to prevent busy-spinning.
+                    sleep(100);
+                }
             }
             return awaitedCondition.getAsBoolean();
         } catch (Exception e) {
