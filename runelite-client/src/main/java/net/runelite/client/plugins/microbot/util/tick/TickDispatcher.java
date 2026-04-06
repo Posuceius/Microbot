@@ -21,7 +21,6 @@ import java.util.function.BooleanSupplier;
  * have already processed the tick before this dispatcher runs. On each tick it:
  * <ol>
  *   <li>Notifies all registered {@link TickListener} instances.</li>
- *   <li>Evaluates and removes completed {@link TickAction} one-shot actions.</li>
  *   <li>Evaluates and signals completed {@link TickWaiter} sleep primitives.</li>
  * </ol>
  * <p>
@@ -35,7 +34,6 @@ public class TickDispatcher
 	private final EventBus eventBus;
 
 	private final CopyOnWriteArrayList<TickListener> listeners;
-	private final CopyOnWriteArrayList<TickAction> tickActions;
 	private final ConcurrentLinkedQueue<TickWaiter> waiters;
 
 	private volatile int currentTick;
@@ -50,7 +48,6 @@ public class TickDispatcher
 		this.eventBus = eventBus;
 		this.client = client;
 		this.listeners = new CopyOnWriteArrayList<>();
-		this.tickActions = new CopyOnWriteArrayList<>();
 		this.waiters = new ConcurrentLinkedQueue<>();
 		this.currentTick = 0;
 
@@ -73,8 +70,8 @@ public class TickDispatcher
 		currentTick = client.getTickCount();
 		long startNanos = System.nanoTime();
 
-		log.debug("TickDispatcher dispatching tick {} (listeners={}, actions={}, waiters={})",
-			currentTick, listeners.size(), tickActions.size(), waiters.size());
+		log.debug("TickDispatcher dispatching tick {} (listeners={}, waiters={})",
+			currentTick, listeners.size(), waiters.size());
 
 		// Phase 1: notify listeners
 		for (TickListener listener : listeners)
@@ -104,16 +101,7 @@ public class TickDispatcher
 			}
 		}
 
-		// Phase 3: evaluate and remove completed one-shot actions
-		int actionCountBefore = tickActions.size();
-		tickActions.removeIf(action -> action.tryFire(currentTick));
-		int actionsRemoved = actionCountBefore - tickActions.size();
-		if (actionsRemoved > 0)
-		{
-			log.debug("TickDispatcher removed {} completed TickAction(s) on tick {}", actionsRemoved, currentTick);
-		}
-
-		// Phase 4: evaluate and signal completed waiters
+		// Phase 3: evaluate and signal completed waiters
 		int waitersSignaled = 0;
 		Iterator<TickWaiter> waiterIterator = waiters.iterator();
 		while (waiterIterator.hasNext())
@@ -134,15 +122,15 @@ public class TickDispatcher
 		long elapsedMs = (System.nanoTime() - startNanos) / 1_000_000L;
 		if (elapsedMs > 5)
 		{
-			log.warn("TickDispatcher tick processing took {}ms (listeners={}, actions={}, waiters={})",
-				elapsedMs, listeners.size(), tickActions.size(), waiters.size());
+			log.warn("TickDispatcher tick processing took {}ms (listeners={}, waiters={})",
+				elapsedMs, listeners.size(), waiters.size());
 		}
 	}
 
 	/**
-	 * Called on the client thread when the game state changes. On logout, pending actions and
-	 * orphaned waiters are cleared. Waiters that are still blocked will time out via their
-	 * wall-clock deadline - the clear here prevents the dispatcher from holding references.
+	 * Called on the client thread when the game state changes. On logout, orphaned waiters are
+	 * cleared. Waiters that are still blocked will time out via their wall-clock deadline - the
+	 * clear here prevents the dispatcher from holding references.
 	 */
 	private void handleGameStateChanged(GameStateChanged event)
 	{
@@ -151,15 +139,12 @@ public class TickDispatcher
 			return;
 		}
 
-		int actionCount = tickActions.size();
 		int waiterCount = waiters.size();
-
-		tickActions.clear();
 		waiters.clear();
 
-		log.info("TickDispatcher cleaning up on logout: cleared {} action(s), orphaned {} waiter(s) "
+		log.info("TickDispatcher cleaning up on logout: orphaned {} waiter(s) "
 				+ "(orphaned waiters will expire via their wall-clock timeout)",
-			actionCount, waiterCount);
+			waiterCount);
 	}
 
 	// -------------------------------------------------------------------------
@@ -195,18 +180,6 @@ public class TickDispatcher
 		{
 			log.debug("TickDispatcher removeListener called for unregistered listener: {}", listener.getClass().getSimpleName());
 		}
-	}
-
-	/**
-	 * Enqueues a {@link TickAction} to be evaluated on upcoming ticks. The action is removed
-	 * automatically once it fires or expires.
-	 *
-	 * @param action the one-shot action to enqueue; must not be null
-	 */
-	public void addAction(TickAction action)
-	{
-		tickActions.add(action);
-		log.debug("TickDispatcher added TickAction (total pending={})", tickActions.size());
 	}
 
 	/**

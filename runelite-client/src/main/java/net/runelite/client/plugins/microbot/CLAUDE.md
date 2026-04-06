@@ -135,176 +135,53 @@ sleepUntil(() -> Rs2Bank.isOpen(), 5000);
 
 ---
 
-## Tick-Synchronized Execution System
+## Tick-Aligned Detection
 
-Two complementary systems let scripts synchronize with game ticks rather than polling with `sleep(600)` loops.
+The framework provides tick-aligned detection to reduce latency between game state changes and script reactions. Game state only changes on server ticks (~600ms), so checking between ticks is wasted work.
 
-- **TickScript** - a new base class where scripts override `onTick()` and react to each game tick directly (callback-driven)
-- **Tick-aligned sleep methods** - drop-in additions to `Global.java` for traditional `Script` subclasses that need tick-boundary precision without migration
+### Tick-Aligned sleepUntil
 
-Both approaches are 100% backward compatible. Existing `Script` subclasses are unchanged.
-
-All files live under `util/tick/`.
-
-### TickScript Pattern
-
-`TickScript` extends `Script` and implements `TickListener`. Instead of a `scheduleWithFixedDelay(600ms)` loop with `sleepUntil()` polling, the script receives an `onTick()` callback on the client thread once per game tick.
-
-**Key rules:**
-- `onTick()` runs on the **client thread** - it must be fast and non-blocking. No `sleep()`, no I/O, no long computations.
-- Call `startTick()` to begin receiving ticks (from `run()` or the plugin's `startUp()`).
-- Call `stopTick()` or `shutdown()` to stop. `shutdown()` calls `stopTick()` automatically.
-
-**Guard:** Before calling `onTick()`, the dispatcher checks `shouldExecuteTick()`, which returns `false` (skips the tick) when the player is not logged in, all scripts are globally paused, a blocking event is executing, or the thread is interrupted. Override `shouldExecuteTick()` to add custom conditions.
-
-### Two Action Dispatch Modes
-
-Rather than performing work directly inside `onTick()`, the script queues one-shot actions using helper methods. There are two dispatch modes:
-
-#### Proactive (anticipatory, tick-perfect)
-
-The action fires immediately on the client thread when the target condition becomes true. Use for timing-sensitive operations.
+The standard `sleepUntil()` method wakes on game tick boundaries instead of polling every 100ms. This is automatic - all existing scripts benefit without code changes:
 
 ```java
-onNextTick(action)                          // fire on the very next tick
-whenReady(condition, action)                // fire on the tick condition becomes true (20-tick default expiry)
-whenReady(condition, action, maxTicks)      // same, custom expiry
-afterTicks(n, action)                       // fire exactly N ticks from now
+// Same API, same thread, same behavior - just detects faster
+sleepUntil(() -> Rs2Bank.isOpen(), 5000);  // wakes when tick fires, not 100ms later
 ```
 
-**Best for:** movement commands, prayer flicking, tick manipulation, anything where the action must land on a specific tick.
+### scheduleOnGameTick (Opt-In)
 
-#### Reactive (human-like delay)
-
-The condition is detected on-tick, then the action fires off the client thread after a gaussian reaction delay - like a real player clicking after noticing a game event.
+Scripts can opt into tick-aligned loop execution instead of wall-clock timing:
 
 ```java
-reactThen(action)                                    // fire after default gaussian delay (~180ms)
-reactThen(action, meanMs, stdDevMs)                  // fire after custom gaussian delay
-reactWhen(condition, action)                         // detect on-tick, fire after default delay
-reactWhen(condition, action, meanMs, stdDevMs)       // detect on-tick, fire after custom delay
-reactWhen(condition, action, maxTicks, meanMs, stdDevMs)  // same, custom expiry
+// BEFORE: runs every 600ms wall-clock (drifts relative to ticks)
+mainScheduledFuture = scheduledExecutorService.scheduleWithFixedDelay(body, 0, 600, TimeUnit.MILLISECONDS);
+
+// AFTER: runs exactly once per game tick
+mainScheduledFuture = scheduleOnGameTick(body);
 ```
 
-**Best for:** banking UI, dialogue clicks, looting, any interaction where a small human-like delay is appropriate.
+The loop body runs on a script thread where all Rs2 utilities and sleeps work normally. This is purely opt-in - existing scripts using `scheduleWithFixedDelay` continue to work unchanged.
 
-### Reaction Profiles
-
-Default profile: **180ms mean, 50ms standard deviation** (approximate human visual reaction time).
-
-Override per script to tune the profile:
+### Additional Tick Utilities
 
 ```java
-@Override
-protected int getReactionMeanMs() { return 220; }
-
-@Override
-protected int getReactionStdDevMs() { return 60; }
-```
-
-Pass `meanMs` and `stdDevMs` directly to `reactThen` / `reactWhen` for per-action overrides.
-
-### Tick-Aligned Sleep (for traditional Script)
-
-Three new static methods in `Global.java` block a script thread until a tick-boundary condition is satisfied. They are drop-in improvements for existing scripts - no migration to `TickScript` required.
-
-```java
-// Block until condition is true on a tick boundary (8-tick default, ~6.4s)
-boolean met = sleepUntilOnTick(() -> Rs2Player.isAnimating());
-boolean met = sleepUntilOnTick(() -> condition, maxTicks);
-boolean met = sleepUntilOnTick(() -> condition, maxTicks, wallClockTimeoutMs);
+// Block until the next game tick fires
+sleepUntilNextTick();
 
 // Block for exactly N game ticks
-boolean completed = sleepForTicks(3);
-boolean completed = sleepForTicks(3, wallClockTimeoutMs);
+sleepForTicks(3);
 
-// Block until the next tick fires (2s wall-clock timeout by default)
-sleepUntilNextTick();
-boolean fired = sleepUntilNextTick(wallClockTimeoutMs);
-```
-
-All three methods return `true` if the condition/tick was met and `false` if the wait timed out or was interrupted. They must be called from a script thread, not the client thread.
-
-### Quick Example
-
-**TickScript approach (tick-perfect woodcutting):**
-
-```java
-@Slf4j
-public class WoodcutterScript extends TickScript {
-    private static final String TREE_NAME = "Oak tree";
-
-    public boolean run() {
-        return startTick();
-    }
-
-    @Override
-    protected void onTick() {
-        if (Rs2Inventory.isFull()) {
-            reactThen(() -> {
-                Rs2Bank.openBank();
-                sleepUntilOnTick(() -> Rs2Bank.isOpen(), 10);
-                Rs2Bank.depositAll();
-                sleepUntilOnTick(() -> Rs2Inventory.isEmpty(), 5);
-                Rs2Bank.closeBank();
-            });
-            return;
-        }
-
-        if (!Rs2Player.isAnimating()) {
-            whenReady(
-                () -> !Rs2Player.isAnimating(),
-                () -> {
-                    Rs2TileObjectModel tree = Microbot.getRs2TileObjectCache().query()
-                        .withName(TREE_NAME).nearest();
-                    if (tree != null) {
-                        tree.click("Chop down");
-                    }
-                }
-            );
-        }
-    }
-}
-```
-
-**Traditional Script equivalent (for comparison):**
-
-```java
-public class WoodcutterScript extends Script {
-    public boolean run() {
-        mainScheduledFuture = scheduledExecutorService.scheduleWithFixedDelay(() -> {
-            if (!Microbot.isLoggedIn()) return;
-            if (Rs2Inventory.isFull()) {
-                Rs2Bank.openBank();
-                sleepUntil(() -> Rs2Bank.isOpen(), 5000);
-                Rs2Bank.depositAll();
-                sleepUntil(() -> Rs2Inventory.isEmpty(), 3000);
-                Rs2Bank.closeBank();
-                return;
-            }
-            if (!Rs2Player.isAnimating()) {
-                Rs2TileObjectModel tree = Microbot.getRs2TileObjectCache().query()
-                    .withName("Oak tree").nearest();
-                if (tree != null) {
-                    tree.click("Chop down");
-                    sleepUntil(() -> Rs2Player.isAnimating(), 2000);
-                }
-            }
-        }, 0, 600, TimeUnit.MILLISECONDS);
-        return true;
-    }
-}
+// With custom wall-clock timeout safety
+sleepForTicks(3, 5000);
 ```
 
 ### Key Files
 
 | File | Purpose |
 |------|---------|
-| `util/tick/TickScript.java` | Base class - extend this instead of `Script` for tick-driven scripts |
-| `util/tick/TickDispatcher.java` | Singleton that receives `GameTick` events and dispatches to listeners and actions |
-| `util/tick/TickListener.java` | Interface implemented by `TickScript`; register directly with `TickDispatcher` for custom use |
-| `util/tick/TickAction.java` | One-shot action wrapper (proactive or reactive); created by the helper methods in `TickScript` |
-| `util/tick/TickWaiter.java` | Blocking synchronization primitive used by `sleepUntilOnTick`, `sleepForTicks`, `sleepUntilNextTick` |
+| `util/tick/TickDispatcher.java` | Singleton that signals script threads on each game tick |
+| `util/tick/TickWaiter.java` | Thread synchronization primitive for tick-aligned sleep |
+| `util/tick/TickListener.java` | Callback interface for tick notifications |
 
 ---
 

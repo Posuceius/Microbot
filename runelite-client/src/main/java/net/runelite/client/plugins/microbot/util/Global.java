@@ -70,22 +70,25 @@ public class Global {
     }
 
     /**
-     * Polls until the supplied condition becomes true or the given duration elapses.
-     * No-op on the client thread to avoid blocking RuneLite.
+     * Polls until the supplied condition becomes true or timeout elapses.
+     * Wakes on game tick boundaries for precise detection instead of polling every 100ms.
+     * Must not be invoked on the client thread; callers should run on script/executor threads.
      */
     public static boolean sleepUntil(BooleanSupplier awaitedCondition, int time) {
         if (Microbot.getClient().isClientThread()) return false;
-        boolean done = false;
-        long startTime = System.currentTimeMillis();
+        long deadline = System.currentTimeMillis() + time;
         try {
-            do {
-                done = awaitedCondition.getAsBoolean();
-                sleep(100);
-            } while (!done && System.currentTimeMillis() - startTime < time);
+            while (System.currentTimeMillis() < deadline) {
+                if (awaitedCondition.getAsBoolean()) return true;
+                long remaining = deadline - System.currentTimeMillis();
+                if (remaining <= 0) break;
+                sleepUntilNextTick(remaining);
+            }
+            return awaitedCondition.getAsBoolean();
         } catch (Exception e) {
             Microbot.logStackTrace("Global Sleep: ", e);
         }
-        return done;
+        return false;
     }
 
     public static boolean sleepUntil(BooleanSupplier awaitedCondition, Runnable action, long timeoutMillis, int sleepMillis) {
@@ -233,46 +236,4 @@ public class Global {
 		return waiter.await();
 	}
 
-	/**
-	 * Blocks until the condition becomes true, evaluating it on the client thread at each game tick.
-	 * Unlike {@link #sleepUntil(BooleanSupplier)}, which polls every 100ms, this method evaluates
-	 * the condition exactly on tick boundaries for precise detection.
-	 * No-op if called on the client thread.
-	 *
-	 * @param condition the condition to evaluate on each tick
-	 * @return true if the condition was met, false if timed out
-	 */
-	public static boolean sleepUntilOnTick(BooleanSupplier condition) {
-		return sleepUntilOnTick(condition, 8);
-	}
-
-	/**
-	 * Blocks until the condition becomes true, evaluating it on the client thread at each game tick.
-	 * No-op if called on the client thread.
-	 *
-	 * @param condition the condition to evaluate on each tick
-	 * @param maxTicks maximum number of ticks to wait
-	 * @return true if the condition was met, false if timed out
-	 */
-	public static boolean sleepUntilOnTick(BooleanSupplier condition, int maxTicks) {
-		return sleepUntilOnTick(condition, maxTicks, maxTicks * 800L + 2000);
-	}
-
-	/**
-	 * Blocks until the condition becomes true, evaluating it on the client thread at each game tick,
-	 * or until the tick limit or wall-clock timeout expires.
-	 * No-op if called on the client thread.
-	 *
-	 * @param condition the condition to evaluate on each tick
-	 * @param maxTicks maximum number of ticks to wait
-	 * @param wallClockTimeoutMs maximum wall-clock time to wait in milliseconds
-	 * @return true if the condition was met, false if timed out
-	 */
-	public static boolean sleepUntilOnTick(BooleanSupplier condition, int maxTicks, long wallClockTimeoutMs) {
-		if (Microbot.getClient().isClientThread()) return false;
-		TickDispatcher dispatcher = Microbot.getTickDispatcher();
-		if (dispatcher == null) return false;
-		TickWaiter waiter = dispatcher.registerWait(condition, maxTicks, wallClockTimeoutMs);
-		return waiter.await();
-	}
 }
